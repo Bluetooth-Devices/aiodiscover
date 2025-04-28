@@ -38,7 +38,7 @@ cached_ipaddress = ">=0.2.0"
 [tool.poetry.group.dev.dependencies]
 pytest = ">=7,<9"
 pytest-cov = ">=3,<7"
-pytest-asyncio = ">=0.23.7,<0.26.0"
+pytest-asyncio = ">=0.23.7,<0.27.0"
 pytest-sugar = "^1.0.0"
 pytest-timeout = "^2.3.1"
 mypy = "^1.10.0"
