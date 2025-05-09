@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v2.7.0 (2025-05-09)
+
+### Features
+
+- Refactor to use a single DNSResolver
+  ([#153](https://github.com/Bluetooth-Devices/aiodiscover/pull/153),
+  [`a57a4d9`](https://github.com/Bluetooth-Devices/aiodiscover/commit/a57a4d9dfe09bd5931ecf8d05afe425befedf27e))
+
+
 ## v2.6.1 (2025-02-22)
 
 ### Bug Fixes
