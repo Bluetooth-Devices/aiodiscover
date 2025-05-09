@@ -6,6 +6,7 @@ from ipaddress import IPv4Address, IPv4Network
 from typing import Any
 from unittest.mock import patch
 
+import aiodns
 import pytest
 
 from aiodiscover import discovery
@@ -94,8 +95,10 @@ async def test_async_query_for_ptrs() -> None:
         patch.object(discovery, "DNS_RESPONSE_TIMEOUT", 0),
         patch("aiodiscover.discovery.DNSResolver.query", mock_query),
     ):
+        resolver = aiodns.DNSResolver(timeout=0)
+        resolver.nameservers = ["192.168.107.1"]
         response = await discovery.async_query_for_ptrs(
-            "192.168.107.1",
+            resolver,
             [
                 IPv4Address("192.168.107.2"),
                 IPv4Address("192.168.107.3"),
@@ -192,8 +195,10 @@ async def test_async_query_for_ptrs_chunked() -> None:
         patch("aiodiscover.discovery.DNSResolver.query", mock_query),
         patch.object(discovery, "QUERY_BUCKET_SIZE", 1),
     ):
+        resolver = aiodns.DNSResolver(timeout=0)
+        resolver.nameservers = ["192.168.107.1"]
         response = await discovery.async_query_for_ptrs(
-            "192.168.107.1",
+            resolver,
             [
                 IPv4Address("192.168.107.2"),
                 IPv4Address("192.168.107.3"),
@@ -302,9 +307,10 @@ async def test_async_get_hostnames_first_nameserver_fails() -> None:
     queries: list[tuple[str, list[IPv4Address]]] = []
 
     async def _mock_query_for_ptrs(
-        nameserver: str,
+        resolver: aiodns.DNSResolver,
         ips_to_lookup: list[IPv4Address],
     ) -> Any:
+        nameserver = resolver.nameservers[0]
         queries.append((nameserver, ips_to_lookup))
         if nameserver == str(IPv4Address("172.0.0.4")):
             return [MockReply(name="xyz.org")] * subnet_size
