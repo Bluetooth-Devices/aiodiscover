@@ -52,11 +52,10 @@ def dns_message_short_hostname(dns_message: Any | None) -> str | None:
 
 
 async def async_query_for_ptrs(
-    nameserver: str,
+    resolver: DNSResolver,
     ips_to_lookup: list[IPv4Address],
 ) -> list[Any | None]:
     """Fetch PTR records for a list of ips."""
-    resolver = DNSResolver(nameservers=[nameserver], timeout=DNS_RESPONSE_TIMEOUT)
     results: list[Any | None] = []
     for ip_chunk in chunked(ips_to_lookup, QUERY_BUCKET_SIZE):
         if TYPE_CHECKING:
@@ -98,6 +97,7 @@ class DiscoverHosts:
         self._sys_network_data: SystemNetworkData | None = None
         self._failed_nameservers: set[IPv4Address | IPv6Address] = set()
         self._last_cache_clear = loop.time()
+        self._resolver = DNSResolver(timeout=DNS_RESPONSE_TIMEOUT)
 
     def _setup_sys_network_data(self) -> SystemNetworkData:
         ip_route: IPRoute | None = None
@@ -187,7 +187,8 @@ class DiscoverHosts:
                 _LOGGER.debug("Skipping previously failed nameserver %s", nameserver)
                 continue
             ips_to_lookup = [ip for ip in ips if str(ip) not in hostnames]
-            results = await async_query_for_ptrs(str(nameserver), ips_to_lookup)
+            self._resolver.nameservers = [str(nameserver)]
+            results = await async_query_for_ptrs(self._resolver, ips_to_lookup)
             if not results:
                 _LOGGER.debug("No results from %s", nameserver)
                 failed_nameservers_this_run.add(nameserver)
