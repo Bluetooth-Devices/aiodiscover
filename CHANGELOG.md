@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v2.7.1 (2025-08-04)
+
+### Bug Fixes
+
+- Default to non-recursive DNS queries to prevent IP bans
+  ([#166](https://github.com/Bluetooth-Devices/aiodiscover/pull/166),
+  [`5c94cfa`](https://github.com/Bluetooth-Devices/aiodiscover/commit/5c94cfa3ea2337e7cb739749d4d6083cc900091e))
+
+
 ## v2.7.0 (2025-05-09)
 
 ### Features
