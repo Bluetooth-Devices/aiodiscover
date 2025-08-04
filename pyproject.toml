@@ -41,7 +41,7 @@ pytest-cov = ">=3,<7"
 pytest-asyncio = ">=0.23.7,<1.2.0"
 pytest-sugar = "^1.0.0"
 pytest-timeout = "^2.3.1"
-mypy = "^1.17.0"
+mypy = "^1.17.1"
 
 [tool.poetry.group.docs]
 optional = true
