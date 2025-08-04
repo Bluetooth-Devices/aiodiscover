@@ -4,9 +4,10 @@ import sys
 from dataclasses import dataclass
 from ipaddress import IPv4Address, IPv4Network
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import aiodns
+import pycares
 import pytest
 
 from aiodiscover import discovery
@@ -380,3 +381,51 @@ async def test_cache_clear() -> None:
         mock_time.return_value = discovery.CACHE_CLEAR_INTERVAL + 10
         discover_hosts._cleanup_cache()
         assert discover_hosts._failed_nameservers == set()
+
+
+@pytest.mark.asyncio
+async def test_no_recurse_default_true() -> None:
+    """Verify that no_recurse defaults to True and sets ARES_FLAG_NORECURSE."""
+    with patch("aiodiscover.discovery.DNSResolver") as mock_resolver_class:
+        mock_resolver = MagicMock()
+        mock_resolver_class.return_value = mock_resolver
+
+        # Create DiscoverHosts with default no_recurse=True
+        discovery.DiscoverHosts()
+
+        # Verify DNSResolver was called with flags=ARES_FLAG_NORECURSE
+        mock_resolver_class.assert_called_once_with(
+            timeout=discovery.DNS_RESPONSE_TIMEOUT, flags=pycares.ARES_FLAG_NORECURSE
+        )
+
+
+@pytest.mark.asyncio
+async def test_no_recurse_false() -> None:
+    """Verify that no_recurse=False does not set ARES_FLAG_NORECURSE."""
+    with patch("aiodiscover.discovery.DNSResolver") as mock_resolver_class:
+        mock_resolver = MagicMock()
+        mock_resolver_class.return_value = mock_resolver
+
+        # Create DiscoverHosts with no_recurse=False
+        discovery.DiscoverHosts(no_recurse=False)
+
+        # Verify DNSResolver was called without flags
+        mock_resolver_class.assert_called_once_with(
+            timeout=discovery.DNS_RESPONSE_TIMEOUT
+        )
+
+
+@pytest.mark.asyncio
+async def test_no_recurse_true_explicit() -> None:
+    """Verify that explicit no_recurse=True sets ARES_FLAG_NORECURSE."""
+    with patch("aiodiscover.discovery.DNSResolver") as mock_resolver_class:
+        mock_resolver = MagicMock()
+        mock_resolver_class.return_value = mock_resolver
+
+        # Create DiscoverHosts with explicit no_recurse=True
+        discovery.DiscoverHosts(no_recurse=True)
+
+        # Verify DNSResolver was called with flags=ARES_FLAG_NORECURSE
+        mock_resolver_class.assert_called_once_with(
+            timeout=discovery.DNS_RESPONSE_TIMEOUT, flags=pycares.ARES_FLAG_NORECURSE
+        )

@@ -7,6 +7,7 @@ from functools import lru_cache, partial
 from itertools import islice
 from typing import TYPE_CHECKING, Any, cast
 
+import pycares
 from aiodns import DNSResolver
 
 from .network import SystemNetworkData
@@ -90,14 +91,27 @@ def chunked(iterable: Iterable[Any], chunked_num: int) -> Iterable[Any]:
 class DiscoverHosts:
     """Discover hosts on the network by ARP and PTR lookup."""
 
-    def __init__(self) -> None:
-        """Init the discovery hosts."""
+    def __init__(self, no_recurse: bool = True) -> None:
+        """
+        Init the discovery hosts.
+
+        Args:
+            no_recurse: If True (default), DNS queries will not request recursion.
+                       This prevents routers from forwarding PTR queries to external
+                       DNS servers, avoiding potential IP bans from public DNS services.
+
+        """
         loop = asyncio.get_running_loop()
         self._loop = loop
         self._sys_network_data: SystemNetworkData | None = None
         self._failed_nameservers: set[IPv4Address | IPv6Address] = set()
         self._last_cache_clear = loop.time()
-        self._resolver = DNSResolver(timeout=DNS_RESPONSE_TIMEOUT)
+
+        # Create resolver with optional no_recurse flag
+        resolver_kwargs = {"timeout": DNS_RESPONSE_TIMEOUT}
+        if no_recurse:
+            resolver_kwargs["flags"] = pycares.ARES_FLAG_NORECURSE
+        self._resolver = DNSResolver(**resolver_kwargs)
 
     def _setup_sys_network_data(self) -> SystemNetworkData:
         ip_route: IPRoute | None = None
