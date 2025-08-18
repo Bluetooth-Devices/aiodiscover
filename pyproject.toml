@@ -39,7 +39,7 @@ cached_ipaddress = ">=0.2.0"
 pytest = ">=7,<9"
 pytest-cov = ">=3,<7"
 pytest-asyncio = ">=0.23.7,<1.2.0"
-pytest-sugar = "^1.0.0"
+pytest-sugar = "^1.1.0"
 pytest-timeout = "^2.3.1"
 mypy = "^1.17.0"
 
