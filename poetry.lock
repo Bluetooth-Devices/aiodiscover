@@ -1089,25 +1089,11 @@ markers = {docs = "python_version >= \"3.11\""}
 
 [[package]]
 name = "pathspec"
-version = "0.12.1"
-description = "Utility library for gitignore style pattern matching of file paths."
-optional = false
-python-versions = ">=3.8"
-groups = ["dev"]
-markers = "python_version < \"3.15\""
-files = [
-    {file = "pathspec-0.12.1-py3-none-any.whl", hash = "sha256:a0d503e138a4c123b27490a4f7beda6a01c6f288df0e4a8b79c7eb0dc7b4cc08"},
-    {file = "pathspec-0.12.1.tar.gz", hash = "sha256:a482d51503a1ab33b1c67a6c3813a26953dbdc71c31dacaef9a838c4e29f5712"},
-]
-
-[[package]]
-name = "pathspec"
 version = "1.1.1"
 description = "Utility library for gitignore style pattern matching of file paths."
 optional = false
 python-versions = ">=3.9"
 groups = ["dev"]
-markers = "python_version >= \"3.15\""
 files = [
     {file = "pathspec-1.1.1-py3-none-any.whl", hash = "sha256:a00ce642f577bf7f473932318056212bc4f8bfdf53128c78bbd5af0b9b20b189"},
     {file = "pathspec-1.1.1.tar.gz", hash = "sha256:17db5ecd524104a120e173814c90367a96a98d07c45b2e10c2f3919fff91bf5a"},
@@ -1364,18 +1350,23 @@ windows-terminal = ["colorama (>=0.4.6)"]
 
 [[package]]
 name = "pyroute2"
-version = "0.9.2"
+version = "0.9.6"
 description = "Python Netlink library"
 optional = false
-python-versions = "*"
+python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "pyroute2-0.9.2-py3-none-any.whl", hash = "sha256:70e3def534fbd8f232927c88415ce0bf5201c208304ad189322d2db5c331fe77"},
-    {file = "pyroute2-0.9.2.tar.gz", hash = "sha256:aea3c0e1b46f48295edb29caaba3ceb6415bdcb975cba3f1489ffcc3198e0ce3"},
+    {file = "pyroute2-0.9.6-py3-none-any.whl", hash = "sha256:3334091326e560a506635449af03b26920d22d4e5a7996aed354363d106fcef8"},
+    {file = "pyroute2-0.9.6.tar.gz", hash = "sha256:6bc5e2ea9a372ded682b4ede4028ba00236bd6e35b42d833f39a96b219ef1db2"},
 ]
 
 [package.dependencies]
 win_inet_pton = {version = "*", markers = "platform_system == \"Windows\""}
+
+[package.extras]
+dev = ["build", "findimports", "flake8", "netaddr", "pre-commit", "pytest", "pytest-asyncio (==0.26.0)", "pytest-cov", "pytest-profiling", "pytest-timeout", "twine"]
+docs = ["aafigure", "build", "docutils", "pre-commit", "pytest", "pytest-asyncio (==0.26.0)", "sphinx", "sphinx-code-include", "twine"]
+repo = ["nox", "pytest", "pytest-cov", "pytest-html", "pytest-timeout", "setuptools"]
 
 [[package]]
 name = "pytest"
@@ -1886,29 +1877,16 @@ files = [
 
 [[package]]
 name = "typing-extensions"
-version = "4.13.2"
-description = "Backported and Experimental Type Hints for Python 3.8+"
-optional = false
-python-versions = ">=3.8"
-groups = ["dev", "docs"]
-files = [
-    {file = "typing_extensions-4.13.2-py3-none-any.whl", hash = "sha256:a439e7c04b49fec3e5d3e2beaa21755cadbbdc391694e28ccdd36ca4a1408f8c"},
-    {file = "typing_extensions-4.13.2.tar.gz", hash = "sha256:e6c81219bd689f51865d9e372991c540bda33a0379d5573cddb9a3a23f7caaef"},
-]
-markers = {dev = "python_version < \"3.15\"", docs = "python_version < \"3.15\" and python_version >= \"3.11\""}
-
-[[package]]
-name = "typing-extensions"
 version = "4.15.0"
 description = "Backported and Experimental Type Hints for Python 3.9+"
 optional = false
 python-versions = ">=3.9"
 groups = ["dev", "docs"]
-markers = "python_version >= \"3.15\""
 files = [
     {file = "typing_extensions-4.15.0-py3-none-any.whl", hash = "sha256:f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548"},
     {file = "typing_extensions-4.15.0.tar.gz", hash = "sha256:0cea48d173cc12fa28ecabc3b837ea3cf6f38c6d1136f85cbaaf598984861466"},
 ]
+markers = {docs = "python_version >= \"3.11\""}
 
 [[package]]
 name = "urllib3"
@@ -2130,4 +2108,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<4.0"
-content-hash = "2354f09b7fac114085821b7cea20c9acf1326e0341e8ae0d411afa70542ba8a6"
+content-hash = "df8e74ef94bd291336dc189fafd4d53eb7b014220de58845baab0f51bd56312d"
