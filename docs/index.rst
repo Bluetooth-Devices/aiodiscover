@@ -1,5 +1,5 @@
 Welcome to Async Host discovery's documentation!
-======================================
+================================================
 
 .. toctree::
    :hidden:
@@ -8,11 +8,10 @@ Welcome to Async Host discovery's documentation!
 
    Overview <self>
    installation
-   Package modules <modules>
    contributing
-   math
 
-.. mdinclude:: ../README.md
+.. include:: ../README.md
+   :parser: myst_parser.sphinx_
 
 Indices and tables
 ==================
