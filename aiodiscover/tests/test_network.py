@@ -29,7 +29,8 @@ def test_parse_resolv_conf() -> None:
 
 
 def test_netifaces_namespace_available() -> None:
-    """The netifaces top-level module must remain importable.
+    """
+    The netifaces top-level module must remain importable.
 
     network.py imports `netifaces` inside a `with suppress(Exception)` block to
     look up the default gateway on macOS. After swapping the dependency to
