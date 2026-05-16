@@ -30,7 +30,9 @@ _init_path = Path(__file__).parent.parent / "aiodiscover" / "__init__.py"
 _version_match = re.search(
     r'^__version__ = "([^"]+)"', _init_path.read_text(), re.MULTILINE
 )
-assert _version_match is not None, "Could not find __version__ in aiodiscover/__init__.py"
+assert _version_match is not None, (
+    "Could not find __version__ in aiodiscover/__init__.py"
+)
 __version__ = _version_match.group(1)
 
 # -- General configuration ---------------------------------------------
