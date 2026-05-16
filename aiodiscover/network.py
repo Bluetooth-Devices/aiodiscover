@@ -124,6 +124,7 @@ def _get_macos_default_gateway() -> str | None:
             text=True,
             timeout=2,
             check=False,
+            close_fds=False,
         )
     except (OSError, subprocess.SubprocessError):
         return None
