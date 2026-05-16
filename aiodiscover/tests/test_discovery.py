@@ -416,6 +416,7 @@ async def test_reload_on_resolv_conf_change() -> None:
             "aiodiscover.network.SystemNetworkData.async_get_neighbours",
             return_value={},
         ),
+        patch("aiodiscover.discovery.async_query_for_ptrs", return_value=[]),
     ):
         await discover_hosts.async_discover()
         assert discover_hosts._sys_network_data is net_data_1
@@ -455,6 +456,7 @@ async def test_no_reload_when_resolv_conf_unchanged() -> None:
             "aiodiscover.network.SystemNetworkData.async_get_neighbours",
             return_value={},
         ),
+        patch("aiodiscover.discovery.async_query_for_ptrs", return_value=[]),
     ):
         await discover_hosts.async_discover()
         discover_hosts._failed_nameservers.add(IPv4Address("172.0.0.3"))
@@ -498,6 +500,7 @@ async def test_reload_when_resolv_conf_appears() -> None:
             "aiodiscover.network.SystemNetworkData.async_get_neighbours",
             return_value={},
         ),
+        patch("aiodiscover.discovery.async_query_for_ptrs", return_value=[]),
     ):
         await discover_hosts.async_discover()
         assert discover_hosts._sys_network_data is net_data_1
