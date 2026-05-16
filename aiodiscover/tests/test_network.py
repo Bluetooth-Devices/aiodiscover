@@ -3,11 +3,16 @@ import asyncio
 import subprocess
 import sys
 from ipaddress import IPv4Address, IPv6Address, ip_address
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from aiodiscover.network import _get_macos_default_gateway, parse_resolv_conf
+from aiodiscover.network import (
+    _get_macos_default_gateway,
+    parse_resolv_conf,
+    resolv_conf_signature,
+)
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -30,6 +35,29 @@ def test_parse_resolv_conf() -> None:
         IPv4Address("32.2.1.1"),
         IPv6Address("2001:4860:4860::8888"),
     ]
+
+
+def test_resolv_conf_signature_returns_stat_tuple(tmp_path: Path) -> None:
+    """Signature reflects mtime_ns and size of resolv.conf."""
+    resolv = tmp_path / "resolv.conf"
+    resolv.write_text("nameserver 1.2.3.4\n")
+    with patch("aiodiscover.network.RESOLV_CONF_PATH", str(resolv)):
+        first = resolv_conf_signature()
+        assert first is not None
+        assert first[1] == len("nameserver 1.2.3.4\n")
+        # Rewrite with different content; size changes -> signature changes.
+        resolv.write_text("nameserver 8.8.8.8\nnameserver 1.1.1.1\n")
+        second = resolv_conf_signature()
+        assert second is not None
+        assert second != first
+
+
+def test_resolv_conf_signature_missing_file_returns_none() -> None:
+    """Missing resolv.conf yields None instead of raising."""
+    with patch(
+        "aiodiscover.network.RESOLV_CONF_PATH", "/nonexistent/resolv.conf"
+    ):
+        assert resolv_conf_signature() is None
 
 
 ROUTE_OUTPUT_WITH_GATEWAY = """\

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import socket
 import subprocess
@@ -43,12 +44,23 @@ LOOPBACK_TARGET_IP = "127.0.0.1"
 
 IGNORE_MACS = {"00:00:00:00:00:00", "ff:ff:ff:ff:ff:ff"}
 
+RESOLV_CONF_PATH = "/etc/resolv.conf"
+
 
 def load_resolv_conf() -> list[IPv4Address | IPv6Address]:
     """Load the resolv.conf."""
-    with open("/etc/resolv.conf") as file:
+    with open(RESOLV_CONF_PATH) as file:
         lines = tuple(file)
     return parse_resolv_conf(lines)
+
+
+def resolv_conf_signature() -> tuple[int, int] | None:
+    """Return a signature describing the current resolv.conf, or None if missing."""
+    try:
+        stat = os.stat(RESOLV_CONF_PATH)
+    except OSError:
+        return None
+    return (stat.st_mtime_ns, stat.st_size)
 
 
 def parse_resolv_conf(lines: Iterable[str]) -> list[IPv4Address | IPv6Address]:
