@@ -54,9 +54,7 @@ def test_resolv_conf_signature_returns_stat_tuple(tmp_path: Path) -> None:
 
 def test_resolv_conf_signature_missing_file_returns_none() -> None:
     """Missing resolv.conf yields None instead of raising."""
-    with patch(
-        "aiodiscover.network.RESOLV_CONF_PATH", "/nonexistent/resolv.conf"
-    ):
+    with patch("aiodiscover.network.RESOLV_CONF_PATH", "/nonexistent/resolv.conf"):
         assert resolv_conf_signature() is None
 
 
