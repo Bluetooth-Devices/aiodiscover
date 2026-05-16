@@ -81,10 +81,14 @@ jobs:
       contents: write
 
     steps:
+      # Check out using the deploy key so PSR's later commit/tag push goes
+      # through SSH as the deploy-key actor — which is in the branch
+      # ruleset's bypass_actors list.
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ github.ref }}
+          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
 
       - name: Create local branch name
         run: git switch -C ${{ github.head_ref || github.ref_name }}
