@@ -12,7 +12,7 @@ build:
       - pip install poetry
       - poetry config virtualenvs.create false
     post_install:
-      - poetry install --only=main,docs
+      - VIRTUAL_ENV=$READTHEDOCS_VIRTUALENV_PATH poetry install --only=main,docs
 
 sphinx:
   configuration: docs/conf.py
