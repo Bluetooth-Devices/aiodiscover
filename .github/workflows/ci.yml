@@ -84,14 +84,10 @@ jobs:
       contents: write
 
     steps:
-      # Check out using the deploy key so PSR's later commit/tag push goes
-      # through SSH as the deploy-key actor — which is in the branch
-      # ruleset's bypass_actors list.
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ github.ref }}
-          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
 
       - name: Create local branch name
         run: git switch -C ${{ github.head_ref || github.ref_name }}
@@ -103,13 +99,24 @@ jobs:
         with:
           no_operation_mode: true
 
+      # Mint a short-lived installation token for the release-bot GitHub
+      # App, which is in the main ruleset's bypass_actors list so PSR's
+      # version-bump commit/tag push isn't blocked by required checks.
+      - name: Generate release App token
+        if: github.ref_name == 'main'
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
       # On main branch: actual PSR + upload to PyPI & GitHub
       - name: Release
         uses: python-semantic-release/python-semantic-release@v10.5.3
         id: release
         if: github.ref_name == 'main'
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ steps.app-token.outputs.token }}
 
       - name: Publish package distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
@@ -119,4 +126,4 @@ jobs:
         uses: python-semantic-release/upload-to-gh-release@main
         if: steps.release.outputs.released == 'true'
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ steps.app-token.outputs.token }}
