@@ -40,13 +40,14 @@ def test_parse_resolv_conf() -> None:
 def test_resolv_conf_signature_returns_stat_tuple(tmp_path: Path) -> None:
     """Signature reflects mtime_ns and size of resolv.conf."""
     resolv = tmp_path / "resolv.conf"
-    resolv.write_text("nameserver 1.2.3.4\n")
+    first_bytes = b"nameserver 1.2.3.4\n"
+    resolv.write_bytes(first_bytes)
     with patch("aiodiscover.network.RESOLV_CONF_PATH", str(resolv)):
         first = resolv_conf_signature()
         assert first is not None
-        assert first[1] == len("nameserver 1.2.3.4\n")
+        assert first[1] == len(first_bytes)
         # Rewrite with different content; size changes -> signature changes.
-        resolv.write_text("nameserver 8.8.8.8\nnameserver 1.1.1.1\n")
+        resolv.write_bytes(b"nameserver 8.8.8.8\nnameserver 1.1.1.1\n")
         second = resolv_conf_signature()
         assert second is not None
         assert second != first
