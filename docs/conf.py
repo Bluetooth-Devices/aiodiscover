@@ -24,8 +24,7 @@ from typing import Any
 
 sys.path.insert(0, os.path.abspath(".."))
 
-import aiodiscover  # noqa: E402
-
+import aiodiscover
 
 # -- General configuration ---------------------------------------------
 
