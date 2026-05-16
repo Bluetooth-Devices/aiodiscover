@@ -115,11 +115,15 @@ def get_router_ip(ipr: IPRoute) -> IPv4Address | None:
     )
 
 
-def _get_macos_default_gateway() -> str | None:
-    """Get the default gateway IP on macOS via `route -n get default`."""
+def _get_macos_default_gateway(family: str = "inet") -> str | None:
+    """
+    Get the default gateway IP on macOS via `route -n get default`.
+
+    family: "inet" for IPv4, "inet6" for IPv6.
+    """
     try:
-        result = subprocess.run(
-            ["route", "-n", "get", "default"],  # noqa: S607
+        result = subprocess.run(  # noqa: S603
+            ["route", "-n", "get", f"-{family}", "default"],  # noqa: S607
             capture_output=True,
             text=True,
             timeout=2,
@@ -133,7 +137,8 @@ def _get_macos_default_gateway() -> str | None:
     for raw_line in result.stdout.splitlines():
         line = raw_line.strip()
         if line.startswith("gateway:"):
-            return line.split(":", 1)[1].strip() or None
+            # IPv6 gateways may include a zone suffix (e.g. fe80::1%en0)
+            return line.split(":", 1)[1].strip().split("%", 1)[0] or None
     return None
 
 

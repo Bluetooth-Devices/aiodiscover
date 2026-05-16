@@ -97,6 +97,35 @@ def test_get_macos_default_gateway_oserror() -> None:
         assert _get_macos_default_gateway() is None
 
 
+def test_get_macos_default_gateway_ipv6_strips_zone() -> None:
+    """IPv6 default gateways may include a zone suffix like `%en0`."""
+    output = (
+        "   route to: default\n"
+        "destination: default\n"
+        "    gateway: fe80::1%en0\n"
+        "  interface: en0\n"
+    )
+    with patch(
+        "aiodiscover.network.subprocess.run",
+        return_value=_mock_run(output),
+    ) as mock_run:
+        assert _get_macos_default_gateway("inet6") == "fe80::1"
+    # Family argument must reach the route command.
+    args = mock_run.call_args[0][0]
+    assert "-inet6" in args
+
+
+def test_get_macos_default_gateway_default_family_is_inet() -> None:
+    with patch(
+        "aiodiscover.network.subprocess.run",
+        return_value=_mock_run(ROUTE_OUTPUT_WITH_GATEWAY),
+    ) as mock_run:
+        _get_macos_default_gateway()
+    args = mock_run.call_args[0][0]
+    assert "-inet" in args
+    assert "-inet6" not in args
+
+
 @pytest.mark.skipif(
     sys.platform != "darwin", reason="route -n get default is macOS-specific"
 )
