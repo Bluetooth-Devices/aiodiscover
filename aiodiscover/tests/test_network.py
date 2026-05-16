@@ -2,8 +2,10 @@
 import asyncio
 import subprocess
 import sys
-from ipaddress import IPv4Address, IPv6Address
+from ipaddress import IPv4Address, IPv6Address, ip_address
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from aiodiscover.network import _get_macos_default_gateway, parse_resolv_conf
 
@@ -93,3 +95,17 @@ def test_get_macos_default_gateway_oserror() -> None:
         side_effect=FileNotFoundError(),
     ):
         assert _get_macos_default_gateway() is None
+
+
+@pytest.mark.skipif(
+    sys.platform != "darwin", reason="route -n get default is macOS-specific"
+)
+def test_get_macos_default_gateway_e2e() -> None:
+    """End-to-end: actually run `route -n get default` and verify parsing."""
+    result = _get_macos_default_gateway()
+    if result is None:
+        # No default gateway (e.g. VPN-only default route or no network) is a
+        # valid outcome; the function must not raise.
+        return
+    # Anything returned must be a parseable IP address.
+    ip_address(result)
