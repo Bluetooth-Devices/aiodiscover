@@ -1,7 +1,6 @@
 # Async Host discovery
 
-[![Build Status](https://github.com/bluetooth-devices/aiodiscover/workflows/Build%20Main/badge.svg)](https://github.com/bluetooth-devices/aiodiscover/actions)
-[![Documentation](https://github.com/bluetooth-devices/aiodiscover/workflows/Documentation/badge.svg)](https://bluetooth-devices.github.io/aiodiscover/)
+[![CI Status](https://github.com/bluetooth-devices/aiodiscover/actions/workflows/ci.yml/badge.svg)](https://github.com/bluetooth-devices/aiodiscover/actions/workflows/ci.yml)
 [![Code Coverage](https://codecov.io/gh/bluetooth-devices/aiodiscover/branch/main/graph/badge.svg)](https://codecov.io/gh/bluetooth-devices/aiodiscover)
 
 Discover hosts by arp and ptr lookup
@@ -28,10 +27,6 @@ pprint.pprint(hosts)
 
 **Stable Release:** `pip install aiodiscover`<br>
 **Development Head:** `pip install git+https://github.com/bluetooth-devices/aiodiscover.git`
-
-## Documentation
-
-For full package documentation please visit [bluetooth-devices.github.io/aiodiscover](https://bluetooth-devices.github.io/aiodiscover).
 
 ## Development
 
