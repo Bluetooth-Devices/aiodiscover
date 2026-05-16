@@ -26,3 +26,19 @@ def test_parse_resolv_conf() -> None:
         IPv4Address("32.2.1.1"),
         IPv6Address("2001:4860:4860::8888"),
     ]
+
+
+def test_netifaces_namespace_available() -> None:
+    """The netifaces top-level module must remain importable.
+
+    network.py imports `netifaces` inside a `with suppress(Exception)` block to
+    look up the default gateway on macOS. After swapping the dependency to
+    netifaces-plus, that import is silently swallowed if the shim ever drops
+    the top-level `netifaces` name, which would leave the macOS gateway lookup
+    permanently dead with no CI signal. This test fails loudly in that case.
+    """
+    import netifaces
+
+    assert hasattr(netifaces, "gateways")
+    assert hasattr(netifaces, "AF_INET")
+    assert callable(netifaces.gateways)
