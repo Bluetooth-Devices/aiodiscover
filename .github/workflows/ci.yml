@@ -74,7 +74,10 @@ jobs:
       - commitlint
 
     runs-on: ubuntu-latest
-    environment: release
+    # Only enter the protected 'release' environment when actually releasing
+    # from main; PR dry-runs would otherwise be blocked by the env's
+    # main-only branch policy.
+    environment: ${{ github.ref_name == 'main' && 'release' || '' }}
     concurrency: release
     permissions:
       id-token: write
