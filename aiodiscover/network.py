@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import re
 import socket
+import subprocess
 import sys
 from contextlib import suppress
 from ipaddress import IPv4Address, IPv4Network, IPv6Address, ip_network
@@ -114,6 +115,33 @@ def get_router_ip(ipr: IPRoute) -> IPv4Address | None:
     )
 
 
+def _get_macos_default_gateway(family: str = "inet") -> str | None:
+    """
+    Get the default gateway IP on macOS via `route -n get default`.
+
+    family: "inet" for IPv4, "inet6" for IPv6.
+    """
+    try:
+        result = subprocess.run(  # noqa: S603
+            ["route", "-n", "get", f"-{family}", "default"],  # noqa: S607
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+            close_fds=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    for raw_line in result.stdout.splitlines():
+        line = raw_line.strip()
+        if line.startswith("gateway:"):
+            # IPv6 gateways may include a zone suffix (e.g. fe80::1%en0)
+            return line.split(":", 1)[1].strip().split("%", 1)[0] or None
+    return None
+
+
 def _fill_neighbor(neighbours: dict[str, str], ip: str, mac: str) -> None:
     """Add a neighbor if it is valid."""
     if not (ip_addr := cached_ip_addresses(ip)):
@@ -183,14 +211,11 @@ class SystemNetworkData:
         if self.ip_route:
             with suppress(Exception):
                 self.router_ip = get_router_ip(self.ip_route)
-        if not self.router_ip:
-            # On MacOS netifaces is the only reliable way to get the default gateway
-            with suppress(Exception):
-                import netifaces  # type: ignore # pylint: disable=import-outside-toplevel
-
-                self.router_ip = cached_ip_addresses(
-                    netifaces.gateways()["default"][netifaces.AF_INET][0],
-                )
+        if not self.router_ip and sys.platform == "darwin":
+            # pyroute2 is Linux-only; on macOS parse `route -n get default`
+            gateway = _get_macos_default_gateway()
+            if gateway:
+                self.router_ip = cached_ip_addresses(gateway)
         if not self.router_ip:
             network_address = str(self.network.network_address)
             self.router_ip = cached_ip_addresses(f"{network_address[:-1]}1")
