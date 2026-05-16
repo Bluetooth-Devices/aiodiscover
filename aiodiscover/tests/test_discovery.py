@@ -384,6 +384,135 @@ async def test_cache_clear() -> None:
 
 
 @pytest.mark.asyncio
+async def test_reload_on_resolv_conf_change() -> None:
+    """Verify async_discover reloads system network data when resolv.conf changes."""
+    discover_hosts = discovery.DiscoverHosts()
+
+    net_data_1 = SystemNetworkData(None, None)
+    net_data_1.router_ip = IPv4Address("192.168.0.1")
+    net_data_1.network = IPv4Network("192.168.0.0/24")
+    net_data_1.nameservers = [IPv4Address("192.168.0.254")]
+
+    net_data_2 = SystemNetworkData(None, None)
+    net_data_2.router_ip = IPv4Address("192.168.0.1")
+    net_data_2.network = IPv4Network("192.168.0.0/24")
+    net_data_2.nameservers = [IPv4Address("192.168.0.99")]
+
+    setup_results = [net_data_1, net_data_2]
+
+    def fake_setup() -> SystemNetworkData:
+        return setup_results.pop(0)
+
+    signature_calls = iter([(1, 100), (2, 100)])
+
+    def fake_sig() -> tuple[int, int]:
+        return next(signature_calls)
+
+    with (
+        patch.object(discover_hosts, "_setup_sys_network_data", fake_setup),
+        patch("aiodiscover.discovery.resolv_conf_signature", fake_sig),
+        patch.object(discovery, "MAX_ADDRESSES", 1024),
+        patch(
+            "aiodiscover.network.SystemNetworkData.async_get_neighbours",
+            return_value={},
+        ),
+        patch("aiodiscover.discovery.async_query_for_ptrs", return_value=[]),
+    ):
+        await discover_hosts.async_discover()
+        assert discover_hosts._sys_network_data is net_data_1
+
+        discover_hosts._failed_nameservers.add(IPv4Address("172.0.0.3"))
+
+        await discover_hosts.async_discover()
+        assert discover_hosts._sys_network_data is net_data_2
+        assert discover_hosts._failed_nameservers == set()
+
+
+@pytest.mark.asyncio
+async def test_no_reload_when_resolv_conf_unchanged() -> None:
+    """Verify async_discover keeps cached data and failed cache when resolv.conf is stable."""
+    discover_hosts = discovery.DiscoverHosts()
+
+    net_data = SystemNetworkData(None, None)
+    net_data.router_ip = IPv4Address("192.168.0.1")
+    net_data.network = IPv4Network("192.168.0.0/24")
+    net_data.nameservers = [IPv4Address("192.168.0.254")]
+
+    call_count = 0
+
+    def fake_setup() -> SystemNetworkData:
+        nonlocal call_count
+        call_count += 1
+        return net_data
+
+    with (
+        patch.object(discover_hosts, "_setup_sys_network_data", fake_setup),
+        patch(
+            "aiodiscover.discovery.resolv_conf_signature",
+            return_value=(7, 200),
+        ),
+        patch.object(discovery, "MAX_ADDRESSES", 1024),
+        patch(
+            "aiodiscover.network.SystemNetworkData.async_get_neighbours",
+            return_value={},
+        ),
+        patch("aiodiscover.discovery.async_query_for_ptrs", return_value=[]),
+    ):
+        await discover_hosts.async_discover()
+        discover_hosts._failed_nameservers.add(IPv4Address("172.0.0.3"))
+        await discover_hosts.async_discover()
+
+    assert call_count == 1
+    assert discover_hosts._sys_network_data is net_data
+    assert discover_hosts._failed_nameservers == {IPv4Address("172.0.0.3")}
+
+
+@pytest.mark.asyncio
+async def test_reload_when_resolv_conf_appears() -> None:
+    """Verify async_discover reloads when resolv.conf transitions from missing to present."""
+    discover_hosts = discovery.DiscoverHosts()
+
+    net_data_1 = SystemNetworkData(None, None)
+    net_data_1.router_ip = IPv4Address("192.168.0.1")
+    net_data_1.network = IPv4Network("192.168.0.0/24")
+    net_data_1.nameservers = []
+
+    net_data_2 = SystemNetworkData(None, None)
+    net_data_2.router_ip = IPv4Address("192.168.0.1")
+    net_data_2.network = IPv4Network("192.168.0.0/24")
+    net_data_2.nameservers = [IPv4Address("192.168.0.254")]
+
+    setup_results = [net_data_1, net_data_2]
+
+    def fake_setup() -> SystemNetworkData:
+        return setup_results.pop(0)
+
+    signature_calls = iter([None, (5, 80)])
+
+    def fake_sig() -> tuple[int, int] | None:
+        return next(signature_calls)
+
+    with (
+        patch.object(discover_hosts, "_setup_sys_network_data", fake_setup),
+        patch("aiodiscover.discovery.resolv_conf_signature", fake_sig),
+        patch.object(discovery, "MAX_ADDRESSES", 1024),
+        patch(
+            "aiodiscover.network.SystemNetworkData.async_get_neighbours",
+            return_value={},
+        ),
+        patch("aiodiscover.discovery.async_query_for_ptrs", return_value=[]),
+    ):
+        await discover_hosts.async_discover()
+        assert discover_hosts._sys_network_data is net_data_1
+
+        discover_hosts._failed_nameservers.add(IPv4Address("172.0.0.3"))
+
+        await discover_hosts.async_discover()
+        assert discover_hosts._sys_network_data is net_data_2
+        assert discover_hosts._failed_nameservers == set()
+
+
+@pytest.mark.asyncio
 async def test_no_recurse_default_true() -> None:
     """Verify that no_recurse defaults to True and sets ARES_FLAG_NORECURSE."""
     with patch("aiodiscover.discovery.DNSResolver") as mock_resolver_class:

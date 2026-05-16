@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, cast
 import pycares
 from aiodns import DNSResolver
 
-from .network import SystemNetworkData
+from .network import SystemNetworkData, resolv_conf_signature
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -104,6 +104,7 @@ class DiscoverHosts:
         loop = asyncio.get_running_loop()
         self._loop = loop
         self._sys_network_data: SystemNetworkData | None = None
+        self._resolv_conf_signature: tuple[int, int] | None = None
         self._failed_nameservers: set[IPv4Address | IPv6Address] = set()
         self._last_cache_clear = loop.time()
 
@@ -139,11 +140,26 @@ class DiscoverHosts:
 
     async def async_discover(self) -> list[dict[str, str]]:
         """Discover hosts on the network by ARP and PTR lookup."""
+        current_signature = await self._loop.run_in_executor(
+            None, resolv_conf_signature
+        )
+        if (
+            self._sys_network_data is not None
+            and current_signature != self._resolv_conf_signature
+        ):
+            _LOGGER.debug(
+                "resolv.conf changed; reloading network data and "
+                "clearing failed nameservers cache",
+            )
+            self._sys_network_data = None
+            self._failed_nameservers.clear()
+
         if not self._sys_network_data:
             self._sys_network_data = await self._loop.run_in_executor(
                 None,
                 self._setup_sys_network_data,
             )
+            self._resolv_conf_signature = current_signature
         sys_network_data = self._sys_network_data
         network = sys_network_data.network
         if network.num_addresses > MAX_ADDRESSES:
