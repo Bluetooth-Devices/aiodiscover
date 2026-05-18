@@ -49,9 +49,25 @@ RESOLV_CONF_PATH = "/etc/resolv.conf"
 
 def load_resolv_conf() -> list[IPv4Address | IPv6Address]:
     """Load the resolv.conf."""
+    return load_resolv_conf_with_signature()[1]
+
+
+def load_resolv_conf_with_signature() -> tuple[
+    tuple[int, int], list[IPv4Address | IPv6Address]
+]:
+    """Load resolv.conf and return (signature, nameservers).
+
+    The signature is derived from ``os.fstat`` on the open file descriptor,
+    so it describes the same inode as the bytes that were read. This closes
+    the TOCTOU window between an upfront ``resolv_conf_signature()`` stat and
+    a later separate ``open()`` (relevant when ``/etc/resolv.conf`` is a
+    symlink whose target an attacker can substitute, e.g. containers with a
+    shared ``/run/resolv.conf`` tmpfs).
+    """
     with open(RESOLV_CONF_PATH) as file:
+        stat = os.fstat(file.fileno())
         lines = tuple(file)
-    return parse_resolv_conf(lines)
+    return (stat.st_mtime_ns, stat.st_size), parse_resolv_conf(lines)
 
 
 def resolv_conf_signature() -> tuple[int, int] | None:
@@ -191,6 +207,7 @@ class SystemNetworkData:
     nameservers: list[IPv4Address | IPv6Address]
     router_ip: IPv4Address | None = None
     local_ip: IPv4Address | None = None
+    resolv_conf_signature: tuple[int, int] | None = None
 
     def __init__(self, ip_route: IPRoute | None, local_ip: str | None = None) -> None:
         """Init system network data."""
@@ -200,11 +217,12 @@ class SystemNetworkData:
     def setup(self) -> None:
         """Obtain the local network data."""
         try:
-            resolvers = load_resolv_conf()
+            signature, resolvers = load_resolv_conf_with_signature()
         except FileNotFoundError:
             if sys.platform != "win32":
                 raise
         else:
+            self.resolv_conf_signature = signature
             self.nameservers = [
                 ip_addr
                 for ip_addr in resolvers

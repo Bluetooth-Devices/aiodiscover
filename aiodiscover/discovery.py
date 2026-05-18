@@ -159,7 +159,14 @@ class DiscoverHosts:
                 None,
                 self._setup_sys_network_data,
             )
-            self._resolv_conf_signature = current_signature
+            # Cache the signature derived from the same fd that was read,
+            # not the upfront stat — the two can disagree if a symlink
+            # target was swapped in between. Fall back to the upfront stat
+            # only when the loaded data did not carry its own signature
+            # (e.g. missing file on Windows).
+            self._resolv_conf_signature = (
+                self._sys_network_data.resolv_conf_signature or current_signature
+            )
         sys_network_data = self._sys_network_data
         network = sys_network_data.network
         if network.num_addresses > MAX_ADDRESSES:

@@ -13,6 +13,7 @@ from aiodiscover.network import (
     _fill_neighbor,
     _get_macos_default_gateway,
     async_populate_arp,
+    load_resolv_conf_with_signature,
     parse_resolv_conf,
     resolv_conf_signature,
 )
@@ -60,6 +61,51 @@ def test_resolv_conf_signature_missing_file_returns_none() -> None:
     """Missing resolv.conf yields None instead of raising."""
     with patch("aiodiscover.network.RESOLV_CONF_PATH", "/nonexistent/resolv.conf"):
         assert resolv_conf_signature() is None
+
+
+def test_load_resolv_conf_with_signature_matches_fstat(tmp_path: Path) -> None:
+    """The returned signature is derived from the same fd as the parsed content."""
+    resolv = tmp_path / "resolv.conf"
+    payload = b"nameserver 192.168.1.53\nnameserver 1.1.1.1\n"
+    resolv.write_bytes(payload)
+    with patch("aiodiscover.network.RESOLV_CONF_PATH", str(resolv)):
+        signature, nameservers = load_resolv_conf_with_signature()
+    assert signature is not None
+    assert signature[1] == len(payload)
+    assert nameservers == [IPv4Address("192.168.1.53"), IPv4Address("1.1.1.1")]
+
+
+def test_load_resolv_conf_with_signature_consistent_after_swap(
+    tmp_path: Path,
+) -> None:
+    """Signature describes the bytes returned, even if the symlink target swaps later.
+
+    The TOCTOU vector in #213 is: external stat at T1, swap, open at T2. The
+    combined loader closes the window by stat'ing the open fd — so the swap
+    only takes effect on the next call, never against already-returned data.
+    """
+    real_a = tmp_path / "a.conf"
+    real_a.write_bytes(b"nameserver 1.1.1.1\n")
+    real_b = tmp_path / "b.conf"
+    real_b.write_bytes(b"nameserver 9.9.9.9\nnameserver 8.8.8.8\n")
+    link = tmp_path / "resolv.conf"
+    link.symlink_to(real_a)
+    with patch("aiodiscover.network.RESOLV_CONF_PATH", str(link)):
+        sig_a, ns_a = load_resolv_conf_with_signature()
+        # Swap the symlink target to a different file.
+        link.unlink()
+        link.symlink_to(real_b)
+        sig_b, ns_b = load_resolv_conf_with_signature()
+    assert ns_a == [IPv4Address("1.1.1.1")]
+    assert ns_b == [IPv4Address("9.9.9.9"), IPv4Address("8.8.8.8")]
+    assert sig_a != sig_b
+
+
+def test_load_resolv_conf_with_signature_raises_on_missing() -> None:
+    """The combined loader propagates FileNotFoundError to its caller."""
+    with patch("aiodiscover.network.RESOLV_CONF_PATH", "/nonexistent/resolv.conf"):
+        with pytest.raises(FileNotFoundError):
+            load_resolv_conf_with_signature()
 
 
 ROUTE_OUTPUT_WITH_GATEWAY = """\
