@@ -46,7 +46,7 @@ mypy = "^1.19.1"
 optional = true
 
 [tool.poetry.group.docs.dependencies]
-myst-parser = { version = ">=0.16", python = ">=3.11"}
+myst-parser = { version = ">=5.1.0", python = ">=3.11"}
 sphinx = { version = ">=4.0", python = ">=3.11"}
 furo = { version = ">=2025.12.19", python = ">=3.11"}
 sphinx-autobuild = { version = ">=2025.8.25", python = ">=3.11"}
