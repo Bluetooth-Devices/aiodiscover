@@ -67,9 +67,7 @@ async def async_query_for_ptrs(
         # silent UDP black-hole or a future regression in the resolver could
         # leave futures pending forever and wedge the discovery loop. Cancel
         # anything still pending after the budget and treat it as failed.
-        _, pending = await asyncio.wait(
-            futures, timeout=DNS_RESPONSE_TIMEOUT + 1
-        )
+        _, pending = await asyncio.wait(futures, timeout=DNS_RESPONSE_TIMEOUT + 1)
         for future in pending:
             future.cancel()
         results.extend(
