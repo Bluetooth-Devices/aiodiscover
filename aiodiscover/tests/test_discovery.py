@@ -617,6 +617,46 @@ def test_dns_message_short_hostname_decodes_idna() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "name",
+    [
+        "evil\nhost.example.com",
+        "evil\rhost.example.com",
+        "evil\thost.example.com",
+        "evil host.example.com",
+        "evil\x00host.example.com",
+        "<script>.example.com",
+        "../etc/passwd",
+        "-leading-hyphen.example.com",
+        "trailing-hyphen-.example.com",
+        "",
+        ".example.com",
+        "a" * 64 + ".example.com",
+        "foo;rm -rf /.example.com",
+    ],
+)
+def test_dns_message_short_hostname_rejects_invalid_labels(name: str) -> None:
+    """A non-LDH PTR label is dropped rather than propagated to callers."""
+    assert discovery.dns_message_short_hostname(MockReply(name)) is None
+
+
+@pytest.mark.parametrize(
+    "name,expected",
+    [
+        ("host.example.com", "host"),
+        ("a", "a"),
+        ("a" * 63, "a" * 63),
+        ("h0st-1.example.com", "h0st-1"),
+        ("HOST.example.com", "HOST"),
+    ],
+)
+def test_dns_message_short_hostname_accepts_valid_labels(
+    name: str, expected: str
+) -> None:
+    """LDH-compliant labels survive unchanged."""
+    assert discovery.dns_message_short_hostname(MockReply(name)) == expected
+
+
 @pytest.mark.asyncio
 async def test_no_recurse_true_explicit() -> None:
     """Verify that explicit no_recurse=True sets ARES_FLAG_NORECURSE."""

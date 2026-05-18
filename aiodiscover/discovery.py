@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from contextlib import suppress
 from functools import lru_cache, partial
 from itertools import islice
@@ -32,6 +33,15 @@ CACHE_CLEAR_INTERVAL = 60 * 60 * 24
 
 _LOGGER = logging.getLogger(__name__)
 
+# RFC 1035 preferred-name LDH label: letters, digits, hyphens; up to 63 chars,
+# must start and end with an alphanumeric. PTR responses are returned from
+# whichever nameserver answered — including untrusted ones on the local
+# segment — so any non-conforming label is dropped rather than propagated to
+# downstream consumers (e.g. Home Assistant's dhcp integration).
+_VALID_HOSTNAME_LABEL = re.compile(
+    r"^(?=.{1,63}$)[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$"
+)
+
 
 @lru_cache(maxsize=MAX_ADDRESSES)
 def decode_idna(name: str) -> str:
@@ -47,9 +57,15 @@ def dns_message_short_hostname(dns_message: Any | None) -> str | None:
     if dns_message is None:
         return None
     name: str = dns_message.name
-    if name.startswith("xn--"):
-        name = decode_idna(name)
-    return name.partition(".")[0]
+    short = name.partition(".")[0]
+    # Validate the on-the-wire label against RFC 1035 LDH before any
+    # IDNA decoding. Legitimate punycode labels (xn--*) are themselves
+    # LDH-clean, so this still admits internationalised hostnames.
+    if not _VALID_HOSTNAME_LABEL.match(short):
+        return None
+    if short.startswith("xn--"):
+        short = decode_idna(short)
+    return short
 
 
 async def async_query_for_ptrs(
