@@ -311,7 +311,9 @@ async def test_async_get_hostnames_first_nameserver_fails() -> None:
         resolver: aiodns.DNSResolver,
         ips_to_lookup: list[IPv4Address],
     ) -> Any:
-        nameserver = resolver.nameservers[0]
+        # pycares 5+ stringifies nameservers as "<ip>:<port>"; older versions
+        # return the bare "<ip>". Normalise to bare IPv4 for the assertions.
+        nameserver = resolver.nameservers[0].split(":", 1)[0]
         queries.append((nameserver, ips_to_lookup))
         if nameserver == str(IPv4Address("172.0.0.4")):
             return [MockReply(name="xyz.org")] * subnet_size
