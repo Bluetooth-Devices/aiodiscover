@@ -62,9 +62,17 @@ async def async_query_for_ptrs(
         if TYPE_CHECKING:
             ip_chunk = cast("list[IPv4Address]", ip_chunk)
         futures = [resolver.query(ip.reverse_pointer, "PTR") for ip in ip_chunk]
-        await asyncio.wait(futures)
+        # Belt-and-braces outer timeout: aiodns/pycares honour the per-query
+        # `DNS_RESPONSE_TIMEOUT` configured at resolver construction, but a
+        # silent UDP black-hole or a future regression in the resolver could
+        # leave futures pending forever and wedge the discovery loop. Cancel
+        # anything still pending after the budget and treat it as failed.
+        _, pending = await asyncio.wait(futures, timeout=DNS_RESPONSE_TIMEOUT + 1)
+        for future in pending:
+            future.cancel()
         results.extend(
-            None if future.exception() else future.result() for future in futures
+            None if (future in pending or future.exception()) else future.result()
+            for future in futures
         )
     resolver.cancel()
     return results
