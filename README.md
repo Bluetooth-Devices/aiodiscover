@@ -19,10 +19,18 @@ import asyncio
 import pprint
 from aiodiscover import DiscoverHosts
 
-discover_hosts = DiscoverHosts()
-hosts = asyncio.run(discover_hosts.async_discover())
-pprint.pprint(hosts)
+
+async def main() -> None:
+    async with DiscoverHosts() as discover_hosts:
+        pprint.pprint(await discover_hosts.async_discover())
+
+
+asyncio.run(main())
 ```
+
+For long-lived consumers, reuse a single `DiscoverHosts` instance across
+scans and call `await discover_hosts.close()` at shutdown to release the
+underlying DNS resolver and netlink socket.
 
 ## Installation
 

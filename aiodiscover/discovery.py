@@ -16,6 +16,7 @@ from .network import SystemNetworkData, resolv_conf_signature
 if TYPE_CHECKING:
     from collections.abc import Iterable
     from ipaddress import IPv4Address, IPv6Address
+    from types import TracebackType
 
     from pyroute2.iproute import IPRoute
 
@@ -139,6 +140,27 @@ class DiscoverHosts:
         if no_recurse:
             resolver_kwargs["flags"] = pycares.ARES_FLAG_NORECURSE
         self._resolver = DNSResolver(**resolver_kwargs)
+
+    async def __aenter__(self) -> DiscoverHosts:
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        await self.close()
+
+    async def close(self) -> None:
+        """Release the underlying DNS resolver and pyroute2 socket."""
+        await self._resolver.close()
+        if self._sys_network_data is not None:
+            ip_route = self._sys_network_data.ip_route
+            if ip_route is not None:
+                with suppress(Exception):
+                    ip_route.close()
+            self._sys_network_data = None
 
     def _setup_sys_network_data(self) -> SystemNetworkData:
         ip_route: IPRoute | None = None

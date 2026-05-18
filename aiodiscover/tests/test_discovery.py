@@ -4,7 +4,7 @@ import sys
 from dataclasses import dataclass
 from ipaddress import IPv4Address, IPv4Network
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiodns
 import pycares
@@ -828,3 +828,69 @@ async def test_no_recurse_true_explicit() -> None:
         mock_resolver_class.assert_called_once_with(
             timeout=discovery.DNS_RESPONSE_TIMEOUT, flags=pycares.ARES_FLAG_NORECURSE
         )
+
+
+@pytest.mark.asyncio
+async def test_close_releases_resolver_and_ip_route() -> None:
+    """close() awaits the resolver and closes a held pyroute2 IPRoute."""
+    discover_hosts = discovery.DiscoverHosts()
+    fake_resolver = MagicMock()
+    fake_resolver.close = AsyncMock()
+    discover_hosts._resolver = fake_resolver
+
+    fake_ip_route = MagicMock()
+    fake_net_data = MagicMock(ip_route=fake_ip_route)
+    discover_hosts._sys_network_data = fake_net_data
+
+    await discover_hosts.close()
+
+    fake_resolver.close.assert_awaited_once()
+    fake_ip_route.close.assert_called_once()
+    assert discover_hosts._sys_network_data is None
+
+
+@pytest.mark.asyncio
+async def test_close_when_no_sys_network_data() -> None:
+    """close() works even if async_discover was never called."""
+    discover_hosts = discovery.DiscoverHosts()
+    fake_resolver = MagicMock()
+    fake_resolver.close = AsyncMock()
+    discover_hosts._resolver = fake_resolver
+
+    await discover_hosts.close()
+
+    fake_resolver.close.assert_awaited_once()
+    assert discover_hosts._sys_network_data is None
+
+
+@pytest.mark.asyncio
+async def test_close_tolerates_ip_route_close_error() -> None:
+    """A pyroute2 close exception does not propagate out of close()."""
+    discover_hosts = discovery.DiscoverHosts()
+    fake_resolver = MagicMock()
+    fake_resolver.close = AsyncMock()
+    discover_hosts._resolver = fake_resolver
+
+    fake_ip_route = MagicMock()
+    fake_ip_route.close.side_effect = OSError("already closed")
+    fake_net_data = MagicMock(ip_route=fake_ip_route)
+    discover_hosts._sys_network_data = fake_net_data
+
+    await discover_hosts.close()
+
+    fake_resolver.close.assert_awaited_once()
+    assert discover_hosts._sys_network_data is None
+
+
+@pytest.mark.asyncio
+async def test_async_context_manager_closes_resolver() -> None:
+    """`async with DiscoverHosts()` calls close() on exit."""
+    discover_hosts = discovery.DiscoverHosts()
+    fake_resolver = MagicMock()
+    fake_resolver.close = AsyncMock()
+    discover_hosts._resolver = fake_resolver
+
+    async with discover_hosts as ctx:
+        assert ctx is discover_hosts
+
+    fake_resolver.close.assert_awaited_once()
