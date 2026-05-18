@@ -544,6 +544,36 @@ async def test_no_recurse_false() -> None:
         )
 
 
+def test_decode_idna_returns_unicode_for_valid_punycode() -> None:
+    """`xn--` punycode is decoded to the original unicode label."""
+    # "xn--bcher-kva" → "bücher"
+    assert discovery.decode_idna("xn--bcher-kva") == "bücher"
+
+
+def test_decode_idna_falls_back_to_input_on_bad_input() -> None:
+    """Garbled punycode raises UnicodeError; we fall back to the input."""
+    discovery.decode_idna.cache_clear()
+    assert discovery.decode_idna("xn--not-valid-punycode-!!!") == (
+        "xn--not-valid-punycode-!!!"
+    )
+
+
+def test_dns_message_short_hostname_handles_none() -> None:
+    assert discovery.dns_message_short_hostname(None) is None
+
+
+def test_dns_message_short_hostname_strips_domain() -> None:
+    assert discovery.dns_message_short_hostname(MockReply("host.example.com")) == "host"
+
+
+def test_dns_message_short_hostname_decodes_idna() -> None:
+    """A punycode reply name is decoded before the short-host slice is taken."""
+    assert (
+        discovery.dns_message_short_hostname(MockReply("xn--bcher-kva.example.com"))
+        == "bücher"
+    )
+
+
 @pytest.mark.asyncio
 async def test_no_recurse_true_explicit() -> None:
     """Verify that explicit no_recurse=True sets ARES_FLAG_NORECURSE."""
