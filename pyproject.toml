@@ -35,7 +35,7 @@ pyroute2 = ">=0.9.6"
 cached_ipaddress = ">=0.2.0"
 
 [tool.poetry.group.dev.dependencies]
-pytest = ">=7,<9"
+pytest = ">=8.4.2,<9"
 pytest-cov = ">=7.1.0,<8"
 pytest-asyncio = ">=0.23.7,<1.2.0"
 pytest-sugar = "^1.1.1"
