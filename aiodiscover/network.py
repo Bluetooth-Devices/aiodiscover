@@ -55,7 +55,8 @@ def load_resolv_conf() -> list[IPv4Address | IPv6Address]:
 def load_resolv_conf_with_signature() -> tuple[
     tuple[int, int], list[IPv4Address | IPv6Address]
 ]:
-    """Load resolv.conf and return (signature, nameservers).
+    """
+    Load resolv.conf and return (signature, nameservers).
 
     The signature is derived from ``os.fstat`` on the open file descriptor,
     so it describes the same inode as the bytes that were read. This closes

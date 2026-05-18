@@ -78,7 +78,8 @@ def test_load_resolv_conf_with_signature_matches_fstat(tmp_path: Path) -> None:
 def test_load_resolv_conf_with_signature_consistent_after_swap(
     tmp_path: Path,
 ) -> None:
-    """Signature describes the bytes returned, even if the symlink target swaps later.
+    """
+    Signature describes the bytes returned, even if the symlink target swaps later.
 
     The TOCTOU vector in #213 is: external stat at T1, swap, open at T2. The
     combined loader closes the window by stat'ing the open fd — so the swap
