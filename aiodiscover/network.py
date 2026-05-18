@@ -47,11 +47,14 @@ IGNORE_MACS = {"00:00:00:00:00:00", "ff:ff:ff:ff:ff:ff"}
 RESOLV_CONF_PATH = "/etc/resolv.conf"
 
 
-def load_resolv_conf() -> list[IPv4Address | IPv6Address]:
-    """Load the resolv.conf."""
+def load_resolv_conf_with_signature() -> tuple[
+    tuple[int, int], list[IPv4Address | IPv6Address]
+]:
+    """Load resolv.conf and return (signature, nameservers) from the same fd."""
     with open(RESOLV_CONF_PATH) as file:
+        stat = os.fstat(file.fileno())
         lines = tuple(file)
-    return parse_resolv_conf(lines)
+    return (stat.st_mtime_ns, stat.st_size), parse_resolv_conf(lines)
 
 
 def resolv_conf_signature() -> tuple[int, int] | None:
@@ -194,6 +197,7 @@ class SystemNetworkData:
     nameservers: list[IPv4Address | IPv6Address]
     router_ip: IPv4Address | None = None
     local_ip: IPv4Address | None = None
+    resolv_conf_signature: tuple[int, int] | None = None
 
     def __init__(self, ip_route: IPRoute | None, local_ip: str | None = None) -> None:
         """Init system network data."""
@@ -207,11 +211,12 @@ class SystemNetworkData:
         # swallowed there) and so later code can iterate unconditionally.
         self.nameservers = []
         try:
-            resolvers = load_resolv_conf()
+            signature, resolvers = load_resolv_conf_with_signature()
         except FileNotFoundError:
             if sys.platform != "win32":
                 raise
         else:
+            self.resolv_conf_signature = signature
             self.nameservers = [
                 ip_addr
                 for ip_addr in resolvers
