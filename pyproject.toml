@@ -131,6 +131,7 @@ select = [
     "W",   # pycodestyle
     "UP",  # pyupgrade
     "I",   # isort
+    "PT",  # flake8-pytest-style
     "RUF", # ruff specific
 ]
 
