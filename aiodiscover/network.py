@@ -276,25 +276,26 @@ class SystemNetworkData:
     async def _async_get_neighbours_arp(self) -> dict[str, str]:
         """Get neighbours with arp command."""
         neighbours: dict[str, str] = {}
-        arp = await asyncio.create_subprocess_exec(
-            "arp",
-            "-a",
-            "-n",
-            stdin=None,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            close_fds=False,
-        )
+        try:
+            arp = await asyncio.create_subprocess_exec(
+                "arp",
+                "-a",
+                "-n",
+                stdin=None,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                close_fds=False,
+            )
+        except OSError:
+            return neighbours
         try:
             async with asyncio_timeout(ARP_TIMEOUT):
                 out_data, _ = await arp.communicate()
         except asyncio.TimeoutError:
-            if arp:
-                with suppress(TypeError):
-                    await arp.kill()  # type: ignore
-                del arp
-            return neighbours
-        except AttributeError:
+            with suppress(ProcessLookupError):
+                arp.kill()
+            with suppress(OSError):
+                await arp.wait()
             return neighbours
 
         for line in out_data.decode().splitlines():

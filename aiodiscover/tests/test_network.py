@@ -345,14 +345,46 @@ async def test_async_get_neighbours_arp_parses_output() -> None:
 
 @pytest.mark.asyncio
 async def test_async_get_neighbours_arp_timeout_returns_empty() -> None:
-    """A timeout while running arp yields an empty dict and kills the proc."""
+    """A timeout while running arp yields an empty dict, kills and reaps the proc."""
     proc = MagicMock()
     proc.communicate = AsyncMock(side_effect=asyncio.TimeoutError())
-    proc.kill = AsyncMock()
+    proc.kill = MagicMock()
+    proc.wait = AsyncMock()
     net_data = SystemNetworkData(None)
     with patch(
         "aiodiscover.network.asyncio.create_subprocess_exec",
         AsyncMock(return_value=proc),
+    ):
+        result = await net_data._async_get_neighbours_arp()
+    assert result == {}
+    proc.kill.assert_called_once_with()
+    proc.wait.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_async_get_neighbours_arp_timeout_survives_already_exited_proc() -> None:
+    """If kill races a natural exit, ProcessLookupError is swallowed."""
+    proc = MagicMock()
+    proc.communicate = AsyncMock(side_effect=asyncio.TimeoutError())
+    proc.kill = MagicMock(side_effect=ProcessLookupError)
+    proc.wait = AsyncMock()
+    net_data = SystemNetworkData(None)
+    with patch(
+        "aiodiscover.network.asyncio.create_subprocess_exec",
+        AsyncMock(return_value=proc),
+    ):
+        result = await net_data._async_get_neighbours_arp()
+    assert result == {}
+    proc.wait.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_async_get_neighbours_arp_handles_spawn_failure() -> None:
+    """If `arp` is not installed, an OSError yields an empty dict."""
+    net_data = SystemNetworkData(None)
+    with patch(
+        "aiodiscover.network.asyncio.create_subprocess_exec",
+        AsyncMock(side_effect=FileNotFoundError),
     ):
         result = await net_data._async_get_neighbours_arp()
     assert result == {}
