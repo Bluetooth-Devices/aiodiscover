@@ -246,8 +246,10 @@ class SystemNetworkData:
         if not ips_missing_arp:
             return neighbours
         sock = async_populate_arp(ips_missing_arp)
-        await asyncio.sleep(ARP_CACHE_POPULATE_TIME)
-        sock.close()
+        try:
+            await asyncio.sleep(ARP_CACHE_POPULATE_TIME)
+        finally:
+            sock.close()
         neighbours.update(await self._async_get_neighbours())
         return neighbours
 
