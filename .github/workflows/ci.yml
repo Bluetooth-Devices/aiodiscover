@@ -10,6 +10,9 @@ concurrency:
   group: ${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
+env:
+  POETRY_VIRTUALENVS_IN_PROJECT: "true"
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -48,17 +51,30 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
       - name: Install poetry
-        run: pipx install poetry
+        run: uv tool install poetry
       - name: Set up Python
         uses: actions/setup-python@v6
         id: setup-python
         with:
           python-version: ${{ matrix.python-version }}
+          allow-prereleases: true
           cache: poetry
+      - name: Cache poetry venv
+        id: cache-venv
+        uses: actions/cache@v5
+        with:
+          path: .venv
+          key: venv-v1-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('poetry.lock', 'pyproject.toml') }}
       - name: Install Dependencies
+        if: steps.cache-venv.outputs.cache-hit != 'true'
         run: |
           poetry install --only=main,dev
+        shell: bash
       - name: Test with Pytest
         run: poetry run pytest --cov --cov-report=xml --cov-report=term-missing
         shell: bash
