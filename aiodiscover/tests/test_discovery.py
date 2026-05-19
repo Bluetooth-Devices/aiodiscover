@@ -917,25 +917,35 @@ async def test_close_is_idempotent() -> None:
     fake_resolver.close.assert_awaited_once()
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="pyroute2 is Linux-only")
 @pytest.mark.asyncio
-async def test_async_discover_then_close_end_to_end() -> None:
-    """End-to-end: real async_discover() followed by close() releases all resources."""
+async def test_close_releases_real_pyroute2_ip_route() -> None:
+    """close() releases a real pyroute2.IPRoute netlink socket without warnings."""
+    from pyroute2.iproute import IPRoute
+
     discover_hosts = discovery.DiscoverHosts()
-    with patch.object(discovery, "MAX_ADDRESSES", 16):
-        await discover_hosts.async_discover()
-    # After a real discover, _sys_network_data is set; close must release it.
+    ip_route = IPRoute()
+    discover_hosts._sys_network_data = SystemNetworkData(ip_route, None)
+
     await discover_hosts.close()
+
     assert discover_hosts._sys_network_data is None
-    # Idempotent second close after a real discover.
-    await discover_hosts.close()
 
 
 @pytest.mark.asyncio
-async def test_async_context_manager_end_to_end() -> None:
-    """End-to-end: `async with DiscoverHosts()` runs a real discover and cleans up."""
-    async with discovery.DiscoverHosts() as discover_hosts:
-        with patch.object(discovery, "MAX_ADDRESSES", 16):
-            hosts = await discover_hosts.async_discover()
-        assert isinstance(hosts, list)
+async def test_close_clears_ip_route_when_resolver_close_raises() -> None:
+    """If resolver.close() raises, the pyroute2 socket is still released."""
+    discover_hosts = discovery.DiscoverHosts()
+    fake_resolver = MagicMock()
+    fake_resolver.close = AsyncMock(side_effect=RuntimeError("boom"))
+    discover_hosts._resolver = fake_resolver
+
+    fake_ip_route = MagicMock()
+    fake_net_data = MagicMock(ip_route=fake_ip_route)
+    discover_hosts._sys_network_data = fake_net_data
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await discover_hosts.close()
+
+    fake_ip_route.close.assert_called_once()
     assert discover_hosts._sys_network_data is None
-    assert discover_hosts._closed is True

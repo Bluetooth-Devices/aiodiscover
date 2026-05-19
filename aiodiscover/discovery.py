@@ -163,13 +163,15 @@ class DiscoverHosts:
         if self._closed:
             return
         self._closed = True
-        await self._resolver.close()
-        if self._sys_network_data is not None:
-            ip_route = self._sys_network_data.ip_route
-            if ip_route is not None:
-                with suppress(OSError):
-                    ip_route.close()
-            self._sys_network_data = None
+        try:
+            await self._resolver.close()
+        finally:
+            if self._sys_network_data is not None:
+                ip_route = self._sys_network_data.ip_route
+                if ip_route is not None:
+                    with suppress(OSError):
+                        ip_route.close()
+                self._sys_network_data = None
 
     def _setup_sys_network_data(self) -> SystemNetworkData:
         ip_route: IPRoute | None = None
