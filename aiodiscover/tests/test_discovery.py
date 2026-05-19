@@ -618,7 +618,7 @@ def test_dns_message_short_hostname_decodes_idna() -> None:
 
 
 @pytest.mark.parametrize(
-    "name,expected",
+    ("name", "expected"),
     [
         ("xn--zckzah.example.com", "テスト"),
         ("xn--wgv71a.example.com", "日本"),
@@ -658,7 +658,7 @@ def test_dns_message_short_hostname_rejects_invalid_labels(name: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "name,expected",
+    ("name", "expected"),
     [
         ("host.example.com", "host"),
         ("a", "a"),
