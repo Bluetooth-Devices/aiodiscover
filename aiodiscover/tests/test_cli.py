@@ -4,8 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
-from contextlib import AbstractContextManager
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, _patch, patch
 
 import pytest
 
@@ -25,7 +24,7 @@ SAMPLE_HOSTS = [
 
 def _patch_discover(
     hosts: list[dict[str, str]] | None = None,
-) -> AbstractContextManager[MagicMock]:
+) -> _patch[MagicMock]:
     instance = MagicMock()
     instance.async_discover = AsyncMock(
         return_value=SAMPLE_HOSTS if hosts is None else hosts
