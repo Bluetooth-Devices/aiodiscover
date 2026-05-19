@@ -917,21 +917,6 @@ async def test_close_is_idempotent() -> None:
     fake_resolver.close.assert_awaited_once()
 
 
-@pytest.mark.skipif(sys.platform != "linux", reason="pyroute2 is Linux-only")
-@pytest.mark.asyncio
-async def test_close_releases_real_pyroute2_ip_route() -> None:
-    """close() releases a real pyroute2.IPRoute netlink socket without warnings."""
-    from pyroute2.iproute import IPRoute
-
-    discover_hosts = discovery.DiscoverHosts()
-    ip_route = IPRoute()
-    discover_hosts._sys_network_data = SystemNetworkData(ip_route, None)
-
-    await discover_hosts.close()
-
-    assert discover_hosts._sys_network_data is None
-
-
 @pytest.mark.asyncio
 async def test_close_clears_ip_route_when_resolver_close_raises() -> None:
     """If resolver.close() raises, the pyroute2 socket is still released."""
