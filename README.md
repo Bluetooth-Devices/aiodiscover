@@ -32,6 +32,35 @@ For long-lived consumers, reuse a single `DiscoverHosts` instance across
 scans and call `await discover_hosts.close()` at shutdown to release the
 underlying DNS resolver and netlink socket.
 
+## Command-line usage
+
+Installing `aiodiscover` exposes an `aiodiscover` console script (also
+runnable as `python -m aiodiscover`) that scans the local network and
+prints the discovered hosts.
+
+```console
+$ aiodiscover
+[{'hostname': 'router', 'ip': '192.168.1.1', 'macaddress': 'aa:bb:cc:dd:ee:ff'},
+ {'hostname': 'laptop', 'ip': '192.168.1.2', 'macaddress': '11:22:33:44:55:66'}]
+
+$ aiodiscover --json
+[
+  {"hostname": "laptop", "ip": "192.168.1.2", "macaddress": "11:22:33:44:55:66"},
+  {"hostname": "router", "ip": "192.168.1.1", "macaddress": "aa:bb:cc:dd:ee:ff"}
+]
+```
+
+Common flags:
+
+- `--json` / `--indent N` — emit machine-readable JSON instead of `pprint`.
+- `-v` / `--debug` — bump logging verbosity (shortcuts for
+  `--log-level INFO` / `DEBUG`).
+- `--recurse` — allow recursive PTR queries (the default `--no-recurse`
+  keeps queries from being forwarded to upstream public resolvers).
+- `--version` — print the installed version and exit.
+
+Run `aiodiscover --help` for the full reference.
+
 ## Installation
 
 **Stable Release:** `pip install aiodiscover`<br>
