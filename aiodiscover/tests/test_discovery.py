@@ -262,19 +262,76 @@ async def test_async_get_hostnames_no_results() -> None:
     net_data.router_ip = IPv4Address("192.168.0.1")
     net_data.network = IPv4Network("192.168.0.0/24")
     net_data.nameservers = [IPv4Address("172.0.0.3"), IPv4Address("172.0.0.4")]
+    subnet_size = len(list(net_data.network.hosts()))
     with (
         patch.object(
             net_data,
             "async_get_neighbours",
             return_value={},
         ),
-        patch("aiodiscover.discovery.async_query_for_ptrs", return_value={}),
+        patch(
+            "aiodiscover.discovery.async_query_for_ptrs",
+            return_value=[None] * subnet_size,
+        ),
     ):
         hostnames = await discover_hosts.async_get_hostnames(net_data)
 
     assert hostnames == {}
     # We should not add failed nameservers if we get no results
     # since it could be a transient issue
+    assert discover_hosts._failed_nameservers == set()
+
+
+@pytest.mark.asyncio
+async def test_async_get_hostnames_silent_failure_is_blacklisted() -> None:
+    """Cache a nameserver as failed when every PTR response was None."""
+    discover_hosts = discovery.DiscoverHosts()
+    net_data = SystemNetworkData(None, None)
+    net_data.router_ip = IPv4Address("192.168.0.1")
+    net_data.network = IPv4Network("192.168.0.0/31")
+    net_data.nameservers = [IPv4Address("172.0.0.3"), IPv4Address("172.0.0.4")]
+    hosts = list(net_data.network.hosts())
+    subnet_size = len(hosts)
+
+    async def _mock_query_for_ptrs(
+        resolver: aiodns.DNSResolver,
+        ips_to_lookup: list[IPv4Address],
+    ) -> Any:
+        nameserver = resolver.nameservers[0].split(":", 1)[0]
+        if nameserver == str(IPv4Address("172.0.0.4")):
+            return [MockReply(name="xyz.org")] * subnet_size
+        return [None] * subnet_size
+
+    with (
+        patch.object(net_data, "async_get_neighbours", return_value={}),
+        patch("aiodiscover.discovery.async_query_for_ptrs", _mock_query_for_ptrs),
+    ):
+        hostnames = await discover_hosts.async_get_hostnames(net_data)
+
+    assert hostnames == {str(ip): "xyz" for ip in hosts}
+    assert discover_hosts._failed_nameservers == {IPv4Address("172.0.0.3")}
+
+
+@pytest.mark.asyncio
+async def test_async_get_hostnames_all_silent_does_not_blacklist() -> None:
+    """Leave the failed-nameserver cache empty when no nameserver succeeded."""
+    discover_hosts = discovery.DiscoverHosts()
+    net_data = SystemNetworkData(None, None)
+    net_data.router_ip = IPv4Address("192.168.0.1")
+    net_data.network = IPv4Network("192.168.0.0/31")
+    net_data.nameservers = [IPv4Address("172.0.0.3"), IPv4Address("172.0.0.4")]
+    subnet_size = len(list(net_data.network.hosts()))
+
+    with (
+        patch.object(net_data, "async_get_neighbours", return_value={}),
+        patch(
+            "aiodiscover.discovery.async_query_for_ptrs",
+            return_value=[None] * subnet_size,
+        ),
+    ):
+        hostnames = await discover_hosts.async_get_hostnames(net_data)
+
+    assert hostnames == {}
     assert discover_hosts._failed_nameservers == set()
 
 
@@ -358,7 +415,9 @@ async def test_async_get_hostnames_first_nameserver_fails() -> None:
         queries.append((nameserver, ips_to_lookup))
         if nameserver == str(IPv4Address("172.0.0.4")):
             return [MockReply(name="xyz.org")] * subnet_size
-        return [] * subnet_size
+        # Real async_query_for_ptrs returns one slot per IP — None on a
+        # failed lookup, not an empty list.
+        return [None] * subnet_size
 
     with (
         patch.object(
@@ -404,15 +463,6 @@ async def test_async_get_hostnames_first_nameserver_fails() -> None:
         assert discover_hosts._failed_nameservers == {IPv4Address("172.0.0.3")}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "PR #234: async_query_for_ptrs returns [None] * N on a silently-timing-out "
-        "nameserver, not []. The `if not results` guard in async_get_hostnames "
-        "never fires, so dead resolvers are not cached and get re-queried every "
-        "discovery cycle. Remove this marker once #234 lands."
-    ),
-)
 @pytest.mark.asyncio
 async def test_silent_nameserver_timeout_is_blacklisted() -> None:
     """Pin: a fully silent nameserver must land in _failed_nameservers."""
@@ -445,14 +495,6 @@ async def test_silent_nameserver_timeout_is_blacklisted() -> None:
     assert discover_hosts._failed_nameservers == {IPv4Address("172.0.0.3")}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "PR #234: silent-timeout nameservers never enter _failed_nameservers, so "
-        "the second discovery cycle re-queries the dead resolver and pays the "
-        "DNS_RESPONSE_TIMEOUT budget again. Remove this marker once #234 lands."
-    ),
-)
 @pytest.mark.asyncio
 async def test_silent_nameserver_skipped_on_second_run() -> None:
     """Pin: a silently-failed nameserver must not be queried on the next run."""
@@ -534,6 +576,8 @@ async def test_reload_on_resolv_conf_change() -> None:
     def fake_sig() -> tuple[int, int]:
         return next(signature_calls)
 
+    subnet_size = len(list(net_data_1.network.hosts()))
+
     with (
         patch.object(discover_hosts, "_setup_sys_network_data", fake_setup),
         patch("aiodiscover.discovery.resolv_conf_signature", fake_sig),
@@ -542,7 +586,10 @@ async def test_reload_on_resolv_conf_change() -> None:
             "aiodiscover.network.SystemNetworkData.async_get_neighbours",
             return_value={},
         ),
-        patch("aiodiscover.discovery.async_query_for_ptrs", return_value=[]),
+        patch(
+            "aiodiscover.discovery.async_query_for_ptrs",
+            return_value=[None] * subnet_size,
+        ),
     ):
         await discover_hosts.async_discover()
         assert discover_hosts._sys_network_data is net_data_1
@@ -571,6 +618,8 @@ async def test_no_reload_when_resolv_conf_unchanged() -> None:
         call_count += 1
         return net_data
 
+    subnet_size = len(list(net_data.network.hosts()))
+
     with (
         patch.object(discover_hosts, "_setup_sys_network_data", fake_setup),
         patch(
@@ -582,7 +631,10 @@ async def test_no_reload_when_resolv_conf_unchanged() -> None:
             "aiodiscover.network.SystemNetworkData.async_get_neighbours",
             return_value={},
         ),
-        patch("aiodiscover.discovery.async_query_for_ptrs", return_value=[]),
+        patch(
+            "aiodiscover.discovery.async_query_for_ptrs",
+            return_value=[None] * subnet_size,
+        ),
     ):
         await discover_hosts.async_discover()
         discover_hosts._failed_nameservers.add(IPv4Address("172.0.0.3"))
@@ -618,6 +670,8 @@ async def test_reload_when_resolv_conf_appears() -> None:
     def fake_sig() -> tuple[int, int] | None:
         return next(signature_calls)
 
+    subnet_size = len(list(net_data_2.network.hosts()))
+
     with (
         patch.object(discover_hosts, "_setup_sys_network_data", fake_setup),
         patch("aiodiscover.discovery.resolv_conf_signature", fake_sig),
@@ -626,7 +680,10 @@ async def test_reload_when_resolv_conf_appears() -> None:
             "aiodiscover.network.SystemNetworkData.async_get_neighbours",
             return_value={},
         ),
-        patch("aiodiscover.discovery.async_query_for_ptrs", return_value=[]),
+        patch(
+            "aiodiscover.discovery.async_query_for_ptrs",
+            return_value=[None] * subnet_size,
+        ),
     ):
         await discover_hosts.async_discover()
         assert discover_hosts._sys_network_data is net_data_1
