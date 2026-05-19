@@ -123,6 +123,7 @@ ignore = [
 ]
 select = [
     "B",   # flake8-bugbear
+    "BLE", # flake8-blind-except
     "D",   # flake8-docstrings
     "C4",  # flake8-comprehensions
     "S",   # flake8-bandit

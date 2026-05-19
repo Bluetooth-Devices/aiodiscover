@@ -89,7 +89,7 @@ def get_local_ip(target: str = DEFAULT_TARGET) -> IPv4Address | None:
     try:
         s.connect((target, 1))
         return cached_ip_addresses(s.getsockname()[0])
-    except Exception:
+    except OSError:
         return None
     finally:
         s.close()
