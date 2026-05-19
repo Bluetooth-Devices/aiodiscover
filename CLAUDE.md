@@ -111,35 +111,25 @@ the user's LAN. That makes a few things load-bearing:
 
 ## Commit / PR conventions
 
-- **Conventional Commits, lowercase subject.** The repo runs
-  `@commitlint/config-conventional` on every commit (via the
-  `commitlint` CI job in `ci.yml` using
-  `wagoid/commitlint-github-action`, plus the `commitizen`
-  pre-commit hook on `commit-msg`). Accepted types: `build`,
-  `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`,
-  `revert`, `style`, `test`. Scopes are optional. The subject
-  (text after `type(scope):`) must start lowercase. Header,
-  body, and footer length limits are explicitly disabled in
-  `commitlint.config.mjs`, but still keep subject lines
-  readable. Examples that pass:
+- **Conventional Commits PR title, lowercase subject.** PRs are
+  squash-merged, so the **PR title** becomes the commit on `main`
+  and is the only string that needs to parse as a Conventional
+  Commit. The repo enforces this via the `pr-title` CI job in
+  `ci.yml` using `amannn/action-semantic-pull-request`. Accepted
+  types: `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`,
+  `refactor`, `revert`, `style`, `test`. Scopes are optional.
+  The subject (text after `type(scope):`) must start lowercase
+  (enforced by `subjectPattern: ^(?![A-Z]).+$`). Per-commit
+  messages on the PR branch are **not** linted — they get
+  collapsed at squash-merge. Examples that pass:
   - `feat: add async context manager to DiscoverHosts`
   - `fix(network): fall back to arp -an on macOS when pyroute2 is missing`
   - `perf!: drop python 3.10 support`
 
-- **No separate PR-title gate.** Unlike some sibling repos
-  (e.g. `dbus-fast`), this repo does **not** run
-  `amannn/action-semantic-pull-request` on the PR title — only
-  the per-commit `commitlint` job runs. That said, GitHub uses
-  the PR title as the squash-merge subject, so it ends up in
-  the commit log on `main` and **must still parse as a valid
-  Conventional Commit** for the next `python-semantic-release`
-  run to classify it correctly. Treat the PR title with the
-  same care as a commit subject.
-
 - **Releases are commit-driven.** `python-semantic-release`
   (configured in `pyproject.toml` under `[tool.semantic_release]`)
-  runs from the `release` job in `ci.yml` after `test`, `lint`,
-  and `commitlint` pass on `main`. It reads the commit log,
+  runs from the `release` job in `ci.yml` after `test` and
+  `lint` pass on `main`. It reads the commit log,
   decides the next version, bumps `pyproject.toml`'s
   `project.version` and `aiodiscover/__init__.py:__version__`,
   writes `CHANGELOG.md`, tags, pushes, uploads to PyPI via
@@ -238,21 +228,20 @@ python = "<3.11" }` — needed only for the 3.10 leg, paired
 
 ## Useful entry points
 
-| Path                                  | What                                                                  |
-| ------------------------------------- | --------------------------------------------------------------------- |
-| `aiodiscover/__init__.py`             | Package entry point — re-exports `DiscoverHosts`, holds `__version__` |
-| `aiodiscover/discovery.py`            | `DiscoverHosts` class + DNS PTR resolution + chunking / batching      |
-| `aiodiscover/network.py`              | `SystemNetworkData` — ARP + interface enumeration; platform branches  |
-| `aiodiscover/util.py`                 | `asyncio_timeout` compat shim (3.10 → `async_timeout`, 3.11+ stdlib)  |
-| `aiodiscover/tests/test_discovery.py` | Tests for `DiscoverHosts` and the DNS PTR pipeline                    |
-| `aiodiscover/tests/test_network.py`   | Tests for ARP cache reading and interface enumeration                 |
-| `aiodiscover/tests/test_init.py`      | Smoke test for top-level imports                                      |
-| `aiodiscover/tests/conftest.py`       | Shared pytest fixtures                                                |
-| `pyproject.toml`                      | Poetry config + ruff / mypy / pytest / semantic-release settings      |
-| `commitlint.config.mjs`               | Conventional Commits config (header/body/footer length limits off)    |
-| `.pre-commit-config.yaml`             | Pre-commit hook set (commitizen, ruff, mypy, prettier, codespell, …)  |
-| `.github/workflows/ci.yml`            | Lint + commitlint + matrix tests + semantic-release / PyPI publish    |
-| `.github/PULL_REQUEST_TEMPLATE.md`    | PR template — description + checklist                                 |
+| Path                                  | What                                                                   |
+| ------------------------------------- | ---------------------------------------------------------------------- |
+| `aiodiscover/__init__.py`             | Package entry point — re-exports `DiscoverHosts`, holds `__version__`  |
+| `aiodiscover/discovery.py`            | `DiscoverHosts` class + DNS PTR resolution + chunking / batching       |
+| `aiodiscover/network.py`              | `SystemNetworkData` — ARP + interface enumeration; platform branches   |
+| `aiodiscover/util.py`                 | `asyncio_timeout` compat shim (3.10 → `async_timeout`, 3.11+ stdlib)   |
+| `aiodiscover/tests/test_discovery.py` | Tests for `DiscoverHosts` and the DNS PTR pipeline                     |
+| `aiodiscover/tests/test_network.py`   | Tests for ARP cache reading and interface enumeration                  |
+| `aiodiscover/tests/test_init.py`      | Smoke test for top-level imports                                       |
+| `aiodiscover/tests/conftest.py`       | Shared pytest fixtures                                                 |
+| `pyproject.toml`                      | Poetry config + ruff / mypy / pytest / semantic-release settings       |
+| `.pre-commit-config.yaml`             | Pre-commit hook set (ruff, mypy, prettier, codespell, …)               |
+| `.github/workflows/ci.yml`            | Lint + PR-title check + matrix tests + semantic-release / PyPI publish |
+| `.github/PULL_REQUEST_TEMPLATE.md`    | PR template — description + checklist                                  |
 
 ## Documentation drift
 

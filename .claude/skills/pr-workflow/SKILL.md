@@ -27,29 +27,24 @@ git checkout -b <branch-name> origin/main
 `bugfix/handle-file-not-found`). It's a soft convention — not
 enforced by CI — but match it when convenient.
 
-## 2. Conventional Commits — for both commit subjects AND PR title
+## 2. Conventional Commits — PR title is what matters
 
-Every commit subject MUST follow
-[Conventional Commits](https://www.conventionalcommits.org/), and
-the PR title should too. The CI gate is the per-commit
-`commitlint` job in `.github/workflows/ci.yml` (running
-`wagoid/commitlint-github-action` against
-`@commitlint/config-conventional`).
+PRs are squash-merged, so the **PR title** becomes the commit on
+`main` and is the only string that has to follow
+[Conventional Commits](https://www.conventionalcommits.org/). The
+CI gate is the `pr-title` job in `.github/workflows/ci.yml`,
+running `amannn/action-semantic-pull-request` against the PR
+title. Per-commit messages on the PR branch are **not** linted —
+they get collapsed at squash-merge.
 
-Unlike some sibling repos, **there is no separate
-`pr-title.yml` workflow** — only the per-commit linter runs.
-GitHub still uses the PR title as the squash-merge commit
-subject, so a malformed title becomes a malformed commit on
-`main`, which `python-semantic-release` will then either
-miscategorise or skip. Treat the PR title with the same care
-as a commit subject.
+A malformed PR title becomes a malformed commit on `main`, which
+`python-semantic-release` will then either miscategorise or skip.
+Get the title right before merge.
 
 Accepted types: `build`, `chore`, `ci`, `docs`, `feat`, `fix`,
 `perf`, `refactor`, `revert`, `style`, `test`. Scope is optional.
-The subject (text after `type(scope):`) must start lowercase.
-`commitlint.config.mjs` explicitly disables header / body /
-footer length limits, so long subjects won't fail CI — but keep
-them readable. Examples that pass:
+The subject (text after `type(scope):`) must start lowercase
+(enforced by `subjectPattern: ^(?![A-Z]).+$`). Examples that pass:
 
 ```
 feat: add async context manager to DiscoverHosts
@@ -103,19 +98,19 @@ expect to see those headings.
 
 ## 4. Commit hygiene
 
-- **Imperative-mood subject line** — "add X", not "added X".
-  Lowercase first word (commitlint rule).
+- **Imperative-mood PR title** — "add X", not "added X".
+  Lowercase first word (enforced by `pr-title` CI job).
 - **No `Co-Authored-By` trailers for LLM tools.** Project
   preference — commits attribute the human who reviewed the
   change.
 - **Don't hand-edit `__version__` or `project.version`.**
   `python-semantic-release` owns both and will overwrite manual
   edits on the next release.
-- Let pre-commit run (commitizen on `commit-msg`, plus ruff
-  lint + format, prettier, codespell, mypy, and the standard
-  `pre-commit-hooks` set on `pre-commit`). If a hook auto-fixes
-  a file, the commit aborts — re-stage the auto-fixed files and
-  re-commit. The full hook list is in `.pre-commit-config.yaml`.
+- Let pre-commit run (ruff lint + format, prettier, codespell,
+  mypy, and the standard `pre-commit-hooks` set on `pre-commit`).
+  If a hook auto-fixes a file, the commit aborts — re-stage the
+  auto-fixed files and re-commit. The full hook list is in
+  `.pre-commit-config.yaml`.
 - Write tests for behavioural changes — they live **inside**
   the package at `aiodiscover/tests/` (not at a top-level
   `tests/` directory). Tests are mocked end-to-end; no network
@@ -141,10 +136,9 @@ Use `--body-file` rather than `--body "..."` so that backticks,
 asterisks, and other Markdown in the body are passed through
 verbatim instead of being mangled by shell quoting.
 
-If the title fails the per-commit `commitlint` check on the
-squash-merge commit (which would only surface when a maintainer
-hits "Squash and merge"), you can fix it in the GitHub UI or
-with `gh pr edit --title "..."`; no push is needed.
+If the `pr-title` CI job fails, fix the title in the GitHub UI
+or with `gh pr edit --title "..."`; the workflow re-runs on the
+edit and no push is needed.
 
 ## 6. After the PR is open
 
@@ -152,13 +146,13 @@ The CI workflow `.github/workflows/ci.yml` runs four jobs:
 
 - **`lint`** — pre-commit on Python 3.x (ruff lint + format,
   prettier, codespell, mypy, and the standard hooks).
-- **`commitlint`** — per-commit Conventional Commits check
-  via `wagoid/commitlint-github-action@v6.2.1`, with
-  `fetch-depth: 0` so it can walk the branch.
+- **`pr-title`** — Conventional Commits check on the PR title
+  via `amannn/action-semantic-pull-request`. Runs only on
+  `pull_request` events.
 - **`test`** matrix — Python 3.10, 3.11, 3.12, 3.13, 3.14 ×
   ubuntu-latest, macOS-latest, windows-latest (15 cells, all
   required green). Coverage is uploaded to Codecov.
-- **`release`** — needs all three above. On PRs from non-main
+- **`release`** — needs `test` and `lint`. On PRs from non-main
   branches it does a `python-semantic-release` dry run
   (`no_operation_mode: true`); on `main` after merge it does
   the real release: bumps versions, writes `CHANGELOG.md`, tags,
