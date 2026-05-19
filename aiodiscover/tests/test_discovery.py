@@ -279,6 +279,59 @@ async def test_async_get_hostnames_no_results() -> None:
 
 
 @pytest.mark.asyncio
+async def test_async_get_hostnames_silent_failure_is_blacklisted() -> None:
+    """Cache a nameserver as failed when every PTR response was None."""
+    discover_hosts = discovery.DiscoverHosts()
+    net_data = SystemNetworkData(None, None)
+    net_data.router_ip = IPv4Address("192.168.0.1")
+    net_data.network = IPv4Network("192.168.0.0/31")
+    net_data.nameservers = [IPv4Address("172.0.0.3"), IPv4Address("172.0.0.4")]
+    hosts = list(net_data.network.hosts())
+    subnet_size = len(hosts)
+
+    async def _mock_query_for_ptrs(
+        resolver: aiodns.DNSResolver,
+        ips_to_lookup: list[IPv4Address],
+    ) -> Any:
+        nameserver = resolver.nameservers[0].split(":", 1)[0]
+        if nameserver == str(IPv4Address("172.0.0.4")):
+            return [MockReply(name="xyz.org")] * subnet_size
+        return [None] * subnet_size
+
+    with (
+        patch.object(net_data, "async_get_neighbours", return_value={}),
+        patch("aiodiscover.discovery.async_query_for_ptrs", _mock_query_for_ptrs),
+    ):
+        hostnames = await discover_hosts.async_get_hostnames(net_data)
+
+    assert hostnames == {str(ip): "xyz" for ip in hosts}
+    assert discover_hosts._failed_nameservers == {IPv4Address("172.0.0.3")}
+
+
+@pytest.mark.asyncio
+async def test_async_get_hostnames_all_silent_does_not_blacklist() -> None:
+    """Leave the failed-nameserver cache empty when no nameserver succeeded."""
+    discover_hosts = discovery.DiscoverHosts()
+    net_data = SystemNetworkData(None, None)
+    net_data.router_ip = IPv4Address("192.168.0.1")
+    net_data.network = IPv4Network("192.168.0.0/31")
+    net_data.nameservers = [IPv4Address("172.0.0.3"), IPv4Address("172.0.0.4")]
+    subnet_size = len(list(net_data.network.hosts()))
+
+    with (
+        patch.object(net_data, "async_get_neighbours", return_value={}),
+        patch(
+            "aiodiscover.discovery.async_query_for_ptrs",
+            return_value=[None] * subnet_size,
+        ),
+    ):
+        hostnames = await discover_hosts.async_get_hostnames(net_data)
+
+    assert hostnames == {}
+    assert discover_hosts._failed_nameservers == set()
+
+
+@pytest.mark.asyncio
 async def test_async_get_hostnames_all_responding() -> None:
     """Verify async_get_hostnames with responses for all IPs."""
     discover_hosts = discovery.DiscoverHosts()
@@ -358,7 +411,9 @@ async def test_async_get_hostnames_first_nameserver_fails() -> None:
         queries.append((nameserver, ips_to_lookup))
         if nameserver == str(IPv4Address("172.0.0.4")):
             return [MockReply(name="xyz.org")] * subnet_size
-        return [] * subnet_size
+        # Real async_query_for_ptrs returns one slot per IP — None on a
+        # failed lookup, not an empty list.
+        return [None] * subnet_size
 
     with (
         patch.object(
