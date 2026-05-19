@@ -4,12 +4,14 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+from contextlib import AbstractContextManager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 import aiodiscover
 from aiodiscover import cli
+from aiodiscover._sanitize import MAX_HOSTNAME_LEN, safe_label_str
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -21,9 +23,13 @@ SAMPLE_HOSTS = [
 ]
 
 
-def _patch_discover(hosts: list[dict[str, str]] | None = None) -> MagicMock:
+def _patch_discover(
+    hosts: list[dict[str, str]] | None = None,
+) -> AbstractContextManager[MagicMock]:
     instance = MagicMock()
-    instance.async_discover = AsyncMock(return_value=hosts or SAMPLE_HOSTS)
+    instance.async_discover = AsyncMock(
+        return_value=SAMPLE_HOSTS if hosts is None else hosts
+    )
     instance.close = AsyncMock(return_value=None)
     instance.__aenter__ = AsyncMock(return_value=instance)
     instance.__aexit__ = AsyncMock(return_value=None)
@@ -34,7 +40,7 @@ def _patch_discover(hosts: list[dict[str, str]] | None = None) -> MagicMock:
 def test_build_parser_defaults() -> None:
     parser = cli.build_parser()
     args = parser.parse_args([])
-    assert args.json is False
+    assert args.format == "table"
     assert args.no_recurse is True
     assert args.log_level == "WARNING"
     assert args.indent == 2
@@ -42,8 +48,13 @@ def test_build_parser_defaults() -> None:
 
 def test_build_parser_json_flag() -> None:
     args = cli.build_parser().parse_args(["--json", "--indent", "4"])
-    assert args.json is True
+    assert args.format == "json"
     assert args.indent == 4
+
+
+def test_build_parser_format_flag() -> None:
+    assert cli.build_parser().parse_args(["--format", "pprint"]).format == "pprint"
+    assert cli.build_parser().parse_args(["-f", "json"]).format == "json"
 
 
 def test_build_parser_recurse_overrides_default() -> None:
@@ -62,9 +73,42 @@ def test_build_parser_recurse_mutually_exclusive() -> None:
         parser.parse_args(["--no-recurse", "--recurse"])
 
 
-def test_main_pprint_output(capsys: pytest.CaptureFixture[str]) -> None:
+def test_main_table_output_default(capsys: pytest.CaptureFixture[str]) -> None:
     with _patch_discover():
         exit_code = cli.main([])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    lines = captured.out.splitlines()
+    assert lines[0].split() == ["Hostname", "IP", "MAC"]
+    assert lines[2].startswith("router")
+    assert lines[3].startswith("laptop")
+
+
+def test_main_table_sorts_by_ip_numerically(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    hosts = [
+        {"hostname": "a", "ip": "192.168.1.10", "macaddress": "aa:bb:cc:dd:ee:01"},
+        {"hostname": "b", "ip": "192.168.1.2", "macaddress": "aa:bb:cc:dd:ee:02"},
+    ]
+    with _patch_discover(hosts):
+        cli.main([])
+    out = capsys.readouterr().out.splitlines()
+    assert out[2].startswith("b")
+    assert out[3].startswith("a")
+
+
+def test_main_table_empty(capsys: pytest.CaptureFixture[str]) -> None:
+    with _patch_discover([]):
+        cli.main([])
+    out = capsys.readouterr().out.splitlines()
+    assert out[0].split() == ["Hostname", "IP", "MAC"]
+    assert len(out) == 2
+
+
+def test_main_pprint_output(capsys: pytest.CaptureFixture[str]) -> None:
+    with _patch_discover():
+        exit_code = cli.main(["--format", "pprint"])
     captured = capsys.readouterr()
     assert exit_code == 0
     assert "router" in captured.out
@@ -77,15 +121,32 @@ def test_main_json_output(capsys: pytest.CaptureFixture[str]) -> None:
     captured = capsys.readouterr()
     assert exit_code == 0
     parsed = json.loads(captured.out)
-    assert parsed == SAMPLE_HOSTS
+    assert [h["hostname"] for h in parsed] == ["router", "laptop"]
 
 
 def test_main_json_custom_indent(capsys: pytest.CaptureFixture[str]) -> None:
     with _patch_discover():
         cli.main(["--json", "--indent", "0"])
     captured = capsys.readouterr()
-    # indent=0 still emits newlines between elements; sort_keys is stable.
-    assert json.loads(captured.out) == SAMPLE_HOSTS
+    assert [h["hostname"] for h in json.loads(captured.out)] == ["router", "laptop"]
+
+
+def test_main_sanitizes_malicious_labels(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    hostile = [
+        {
+            "hostname": "evil\x1b[2Jhost",
+            "ip": "192.168.1.5\n",
+            "macaddress": "aa:bb:cc\x00:dd:ee:ff",
+        }
+    ]
+    with _patch_discover(hostile):
+        cli.main(["--json"])
+    parsed = json.loads(capsys.readouterr().out)
+    assert parsed[0]["hostname"] == "evil[2Jhost"
+    assert parsed[0]["ip"] == "192.168.1.5"
+    assert parsed[0]["macaddress"] == "aa:bb:cc:dd:ee:ff"
 
 
 def test_main_passes_no_recurse_default() -> None:
@@ -139,3 +200,15 @@ def test_main_module_entry_point() -> None:
             runpy.run_module("aiodiscover", run_name="__main__")
         assert excinfo.value.code == 0
         mocked_main.assert_called_once()
+
+
+def test_safe_label_str_strips_non_printable() -> None:
+    assert safe_label_str("a\x1b[31mb\x00c\nd", 100) == "a[31mbcd"
+
+
+def test_safe_label_str_length_caps() -> None:
+    assert safe_label_str("x" * 200, 10) == "x" * 10
+
+
+def test_safe_label_str_unicode_printable_survives() -> None:
+    assert safe_label_str("café", MAX_HOSTNAME_LEN) == "café"

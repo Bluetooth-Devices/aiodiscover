@@ -40,19 +40,28 @@ prints the discovered hosts.
 
 ```console
 $ aiodiscover
-[{'hostname': 'router', 'ip': '192.168.1.1', 'macaddress': 'aa:bb:cc:dd:ee:ff'},
- {'hostname': 'laptop', 'ip': '192.168.1.2', 'macaddress': '11:22:33:44:55:66'}]
+Hostname  IP           MAC
+--------  -----------  -----------------
+router    192.168.1.1  aa:bb:cc:dd:ee:ff
+laptop    192.168.1.2  11:22:33:44:55:66
 
 $ aiodiscover --json
 [
-  {"hostname": "laptop", "ip": "192.168.1.2", "macaddress": "11:22:33:44:55:66"},
-  {"hostname": "router", "ip": "192.168.1.1", "macaddress": "aa:bb:cc:dd:ee:ff"}
+  {"hostname": "router", "ip": "192.168.1.1", "macaddress": "aa:bb:cc:dd:ee:ff"},
+  {"hostname": "laptop", "ip": "192.168.1.2", "macaddress": "11:22:33:44:55:66"}
 ]
 ```
 
+Rows are sorted by IP. Peer-supplied hostname / MAC / IP values are
+stripped of non-printable characters before display, so a hostile DHCP /
+DNS responder on the LAN can't inject ANSI escapes or control bytes into
+the terminal.
+
 Common flags:
 
-- `--json` / `--indent N` — emit machine-readable JSON instead of `pprint`.
+- `--format {table,json,pprint}` — pick output format (default `table`).
+- `--json` — shortcut for `--format json`. Pair with `--indent N` to
+  control JSON indentation.
 - `-v` / `--debug` — bump logging verbosity (shortcuts for
   `--log-level INFO` / `DEBUG`).
 - `--recurse` — allow recursive PTR queries (the default `--no-recurse`
