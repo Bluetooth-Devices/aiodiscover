@@ -62,6 +62,31 @@ def test_resolv_conf_signature_missing_file_returns_none() -> None:
         assert resolv_conf_signature() is None
 
 
+def test_setup_defaults_nameservers_to_empty_on_windows_without_resolv_conf() -> None:
+    """On Windows, a missing resolv.conf leaves nameservers as an empty list."""
+    net_data = SystemNetworkData(None, local_ip="192.168.1.10")
+    with (
+        patch("aiodiscover.network.load_resolv_conf", side_effect=FileNotFoundError),
+        patch("aiodiscover.network.sys") as mock_sys,
+        patch("aiodiscover.network.ifaddr.get_adapters", return_value=[]),
+    ):
+        mock_sys.platform = "win32"
+        net_data.setup()
+    assert net_data.nameservers == []
+
+
+def test_setup_propagates_missing_resolv_conf_on_non_windows() -> None:
+    """On Linux/macOS, a missing resolv.conf still bubbles up."""
+    net_data = SystemNetworkData(None, local_ip="192.168.1.10")
+    with (
+        patch("aiodiscover.network.load_resolv_conf", side_effect=FileNotFoundError),
+        patch("aiodiscover.network.sys") as mock_sys,
+    ):
+        mock_sys.platform = "linux"
+        with pytest.raises(FileNotFoundError):
+            net_data.setup()
+
+
 ROUTE_OUTPUT_WITH_GATEWAY = """\
    route to: default
 destination: default

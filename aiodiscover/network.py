@@ -199,6 +199,10 @@ class SystemNetworkData:
 
     def setup(self) -> None:
         """Obtain the local network data."""
+        # Default to an empty list so attribute access stays safe when
+        # resolv.conf is absent on Windows (the FileNotFoundError below is
+        # swallowed there) and so later code can iterate unconditionally.
+        self.nameservers = []
         try:
             resolvers = load_resolv_conf()
         except FileNotFoundError:
