@@ -72,7 +72,10 @@ def parse_resolv_conf(lines: Iterable[str]) -> list[IPv4Address | IPv6Address]:
             continue
         if line[0] in ("#", ";"):
             continue
-        key, value = line.split(None, 1)
+        parts = line.split(None, 1)
+        if len(parts) != 2:
+            continue
+        key, value = parts
         if key == "nameserver":
             if (ip_addr := cached_ip_addresses(value)) and ip_addr not in nameservers:
                 nameservers.append(ip_addr)

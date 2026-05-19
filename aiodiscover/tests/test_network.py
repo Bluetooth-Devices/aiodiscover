@@ -40,6 +40,24 @@ def test_parse_resolv_conf() -> None:
     ]
 
 
+def test_parse_resolv_conf_skips_malformed_lines() -> None:
+    """Bare tokens without a value must be skipped, not crash setup."""
+    resolv_conf = parse_resolv_conf(
+        [
+            "nameserver 1.1.1.1",
+            "options",
+            "nameserver",
+            "",
+            "   ",
+            "nameserver 8.8.8.8",
+        ],
+    )
+    assert resolv_conf == [
+        IPv4Address("1.1.1.1"),
+        IPv4Address("8.8.8.8"),
+    ]
+
+
 def test_resolv_conf_signature_returns_stat_tuple(tmp_path: Path) -> None:
     """Signature reflects mtime_ns and size of resolv.conf."""
     resolv = tmp_path / "resolv.conf"
