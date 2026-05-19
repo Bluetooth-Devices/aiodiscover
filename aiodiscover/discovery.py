@@ -154,7 +154,8 @@ class DiscoverHosts:
         await self.close()
 
     async def close(self) -> None:
-        """Release the underlying DNS resolver and pyroute2 socket.
+        """
+        Release the underlying DNS resolver and pyroute2 socket.
 
         After close() the instance must not be reused; calling close()
         again is a no-op.
