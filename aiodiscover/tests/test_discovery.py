@@ -618,6 +618,23 @@ def test_dns_message_short_hostname_decodes_idna() -> None:
 
 
 @pytest.mark.parametrize(
+    "name,expected",
+    [
+        ("xn--zckzah.example.com", "テスト"),
+        ("xn--wgv71a.example.com", "日本"),
+        ("xn--0zwm56d.example.com", "测试"),
+        ("xn--3e0b707e.example.com", "한국"),
+        ("xn--zck4a3c.example.com", "ホスト"),
+    ],
+)
+def test_dns_message_short_hostname_decodes_east_asian_idna(
+    name: str, expected: str
+) -> None:
+    """East Asian punycode labels survive LDH validation and decode."""
+    assert discovery.dns_message_short_hostname(MockReply(name)) == expected
+
+
+@pytest.mark.parametrize(
     "name",
     [
         "evil\nhost.example.com",
