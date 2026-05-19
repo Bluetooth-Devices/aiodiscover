@@ -286,7 +286,7 @@ class SystemNetworkData:
                 stderr=asyncio.subprocess.PIPE,
                 close_fds=False,
             )
-        except (OSError, AttributeError):
+        except OSError:
             return neighbours
         try:
             async with asyncio_timeout(ARP_TIMEOUT):
@@ -294,7 +294,7 @@ class SystemNetworkData:
         except asyncio.TimeoutError:
             with suppress(ProcessLookupError):
                 arp.kill()
-            with suppress(Exception):
+            with suppress(OSError):
                 await arp.wait()
             return neighbours
 
