@@ -593,6 +593,8 @@ async def test_reload_on_resolv_conf_change() -> None:
     def fake_sig() -> tuple[int, int]:
         return next(signature_calls)
 
+    subnet_size = len(list(net_data_1.network.hosts()))
+
     with (
         patch.object(discover_hosts, "_setup_sys_network_data", fake_setup),
         patch("aiodiscover.discovery.resolv_conf_signature", fake_sig),
@@ -601,7 +603,10 @@ async def test_reload_on_resolv_conf_change() -> None:
             "aiodiscover.network.SystemNetworkData.async_get_neighbours",
             return_value={},
         ),
-        patch("aiodiscover.discovery.async_query_for_ptrs", return_value=[]),
+        patch(
+            "aiodiscover.discovery.async_query_for_ptrs",
+            return_value=[None] * subnet_size,
+        ),
     ):
         await discover_hosts.async_discover()
         assert discover_hosts._sys_network_data is net_data_1
@@ -630,6 +635,8 @@ async def test_no_reload_when_resolv_conf_unchanged() -> None:
         call_count += 1
         return net_data
 
+    subnet_size = len(list(net_data.network.hosts()))
+
     with (
         patch.object(discover_hosts, "_setup_sys_network_data", fake_setup),
         patch(
@@ -641,7 +648,10 @@ async def test_no_reload_when_resolv_conf_unchanged() -> None:
             "aiodiscover.network.SystemNetworkData.async_get_neighbours",
             return_value={},
         ),
-        patch("aiodiscover.discovery.async_query_for_ptrs", return_value=[]),
+        patch(
+            "aiodiscover.discovery.async_query_for_ptrs",
+            return_value=[None] * subnet_size,
+        ),
     ):
         await discover_hosts.async_discover()
         discover_hosts._failed_nameservers.add(IPv4Address("172.0.0.3"))
@@ -677,6 +687,8 @@ async def test_reload_when_resolv_conf_appears() -> None:
     def fake_sig() -> tuple[int, int] | None:
         return next(signature_calls)
 
+    subnet_size = len(list(net_data_2.network.hosts()))
+
     with (
         patch.object(discover_hosts, "_setup_sys_network_data", fake_setup),
         patch("aiodiscover.discovery.resolv_conf_signature", fake_sig),
@@ -685,7 +697,10 @@ async def test_reload_when_resolv_conf_appears() -> None:
             "aiodiscover.network.SystemNetworkData.async_get_neighbours",
             return_value={},
         ),
-        patch("aiodiscover.discovery.async_query_for_ptrs", return_value=[]),
+        patch(
+            "aiodiscover.discovery.async_query_for_ptrs",
+            return_value=[None] * subnet_size,
+        ),
     ):
         await discover_hosts.async_discover()
         assert discover_hosts._sys_network_data is net_data_1
