@@ -404,6 +404,89 @@ async def test_async_get_hostnames_first_nameserver_fails() -> None:
         assert discover_hosts._failed_nameservers == {IPv4Address("172.0.0.3")}
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "PR #234: async_query_for_ptrs returns [None] * N on a silently-timing-out "
+        "nameserver, not []. The `if not results` guard in async_get_hostnames "
+        "never fires, so dead resolvers are not cached and get re-queried every "
+        "discovery cycle. Remove this marker once #234 lands."
+    ),
+)
+@pytest.mark.asyncio
+async def test_silent_nameserver_timeout_is_blacklisted() -> None:
+    """Pin: a fully silent nameserver must land in _failed_nameservers."""
+    discover_hosts = discovery.DiscoverHosts()
+    net_data = SystemNetworkData(None, None)
+    net_data.router_ip = IPv4Address("192.168.0.1")
+    net_data.network = IPv4Network("192.168.0.0/31")
+    net_data.nameservers = [IPv4Address("172.0.0.3"), IPv4Address("172.0.0.4")]
+    hosts = list(net_data.network.hosts())
+    subnet_size = len(hosts)
+
+    async def _mock_query_for_ptrs(
+        resolver: aiodns.DNSResolver,
+        ips_to_lookup: list[IPv4Address],
+    ) -> Any:
+        nameserver = resolver.nameservers[0].split(":", 1)[0]
+        if nameserver == str(IPv4Address("172.0.0.4")):
+            return [MockReply(name="xyz.org")] * subnet_size
+        # Real shape returned by async_query_for_ptrs when a resolver times
+        # out on every IP: a list of Nones, one slot per requested IP.
+        return [None] * subnet_size
+
+    with (
+        patch.object(net_data, "async_get_neighbours", return_value={}),
+        patch("aiodiscover.discovery.async_query_for_ptrs", _mock_query_for_ptrs),
+    ):
+        hostnames = await discover_hosts.async_get_hostnames(net_data)
+
+    assert hostnames == {str(ip): "xyz" for ip in hosts}
+    assert discover_hosts._failed_nameservers == {IPv4Address("172.0.0.3")}
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "PR #234: silent-timeout nameservers never enter _failed_nameservers, so "
+        "the second discovery cycle re-queries the dead resolver and pays the "
+        "DNS_RESPONSE_TIMEOUT budget again. Remove this marker once #234 lands."
+    ),
+)
+@pytest.mark.asyncio
+async def test_silent_nameserver_skipped_on_second_run() -> None:
+    """Pin: a silently-failed nameserver must not be queried on the next run."""
+    discover_hosts = discovery.DiscoverHosts()
+    net_data = SystemNetworkData(None, None)
+    net_data.router_ip = IPv4Address("192.168.0.1")
+    net_data.network = IPv4Network("192.168.0.0/31")
+    net_data.nameservers = [IPv4Address("172.0.0.3"), IPv4Address("172.0.0.4")]
+    hosts = list(net_data.network.hosts())
+    subnet_size = len(hosts)
+
+    queries: list[str] = []
+
+    async def _mock_query_for_ptrs(
+        resolver: aiodns.DNSResolver,
+        ips_to_lookup: list[IPv4Address],
+    ) -> Any:
+        nameserver = resolver.nameservers[0].split(":", 1)[0]
+        queries.append(nameserver)
+        if nameserver == str(IPv4Address("172.0.0.4")):
+            return [MockReply(name="xyz.org")] * subnet_size
+        return [None] * subnet_size
+
+    with (
+        patch.object(net_data, "async_get_neighbours", return_value={}),
+        patch("aiodiscover.discovery.async_query_for_ptrs", _mock_query_for_ptrs),
+    ):
+        await discover_hosts.async_get_hostnames(net_data)
+        queries.clear()
+        await discover_hosts.async_get_hostnames(net_data)
+
+    assert queries == [str(IPv4Address("172.0.0.4"))]
+
+
 @pytest.mark.asyncio
 async def test_cache_clear() -> None:
     """Verify async_get_hostnames when the first nameserver fails."""
