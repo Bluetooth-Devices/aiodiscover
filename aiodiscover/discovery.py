@@ -134,6 +134,7 @@ class DiscoverHosts:
         self._resolv_conf_signature: ResolvConfSignature | None = None
         self._failed_nameservers: set[IPv4Address | IPv6Address] = set()
         self._last_cache_clear = loop.time()
+        self._closed = False
 
         # Create resolver with optional no_recurse flag
         resolver_kwargs = {"timeout": DNS_RESPONSE_TIMEOUT}
@@ -153,7 +154,14 @@ class DiscoverHosts:
         await self.close()
 
     async def close(self) -> None:
-        """Release the underlying DNS resolver and pyroute2 socket."""
+        """Release the underlying DNS resolver and pyroute2 socket.
+
+        After close() the instance must not be reused; calling close()
+        again is a no-op.
+        """
+        if self._closed:
+            return
+        self._closed = True
         await self._resolver.close()
         if self._sys_network_data is not None:
             ip_route = self._sys_network_data.ip_route

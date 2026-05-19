@@ -894,3 +894,24 @@ async def test_async_context_manager_closes_resolver() -> None:
         assert ctx is discover_hosts
 
     fake_resolver.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_close_with_real_resolver() -> None:
+    """End-to-end: close() succeeds against the real aiodns DNSResolver."""
+    discover_hosts = discovery.DiscoverHosts()
+    await discover_hosts.close()
+
+
+@pytest.mark.asyncio
+async def test_close_is_idempotent() -> None:
+    """A second close() call is a no-op and does not re-await the resolver."""
+    discover_hosts = discovery.DiscoverHosts()
+    fake_resolver = MagicMock()
+    fake_resolver.close = AsyncMock()
+    discover_hosts._resolver = fake_resolver
+
+    await discover_hosts.close()
+    await discover_hosts.close()
+
+    fake_resolver.close.assert_awaited_once()
