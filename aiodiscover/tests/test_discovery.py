@@ -915,3 +915,27 @@ async def test_close_is_idempotent() -> None:
     await discover_hosts.close()
 
     fake_resolver.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_async_discover_then_close_end_to_end() -> None:
+    """End-to-end: real async_discover() followed by close() releases all resources."""
+    discover_hosts = discovery.DiscoverHosts()
+    with patch.object(discovery, "MAX_ADDRESSES", 16):
+        await discover_hosts.async_discover()
+    # After a real discover, _sys_network_data is set; close must release it.
+    await discover_hosts.close()
+    assert discover_hosts._sys_network_data is None
+    # Idempotent second close after a real discover.
+    await discover_hosts.close()
+
+
+@pytest.mark.asyncio
+async def test_async_context_manager_end_to_end() -> None:
+    """End-to-end: `async with DiscoverHosts()` runs a real discover and cleans up."""
+    async with discovery.DiscoverHosts() as discover_hosts:
+        with patch.object(discovery, "MAX_ADDRESSES", 16):
+            hosts = await discover_hosts.async_discover()
+        assert isinstance(hosts, list)
+    assert discover_hosts._sys_network_data is None
+    assert discover_hosts._closed is True
