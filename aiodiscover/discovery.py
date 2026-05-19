@@ -16,6 +16,7 @@ from .network import SystemNetworkData, resolv_conf_signature
 if TYPE_CHECKING:
     from collections.abc import Iterable
     from ipaddress import IPv4Address, IPv6Address
+    from types import TracebackType
 
     from pyroute2.iproute import IPRoute
 
@@ -133,12 +134,45 @@ class DiscoverHosts:
         self._resolv_conf_signature: ResolvConfSignature | None = None
         self._failed_nameservers: set[IPv4Address | IPv6Address] = set()
         self._last_cache_clear = loop.time()
+        self._closed = False
 
         # Create resolver with optional no_recurse flag
         resolver_kwargs = {"timeout": DNS_RESPONSE_TIMEOUT}
         if no_recurse:
             resolver_kwargs["flags"] = pycares.ARES_FLAG_NORECURSE
         self._resolver = DNSResolver(**resolver_kwargs)
+
+    async def __aenter__(self) -> DiscoverHosts:
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        await self.close()
+
+    async def close(self) -> None:
+        """
+        Release the underlying DNS resolver and pyroute2 socket.
+
+        After close() the instance must not be reused: calling
+        async_discover() raises RuntimeError. A second close() is a
+        no-op.
+        """
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            await self._resolver.close()
+        finally:
+            if self._sys_network_data is not None:
+                ip_route = self._sys_network_data.ip_route
+                if ip_route is not None:
+                    with suppress(OSError):
+                        ip_route.close()
+                self._sys_network_data = None
 
     def _setup_sys_network_data(self) -> SystemNetworkData:
         ip_route: IPRoute | None = None
@@ -166,6 +200,8 @@ class DiscoverHosts:
 
     async def async_discover(self) -> list[dict[str, str]]:
         """Discover hosts on the network by ARP and PTR lookup."""
+        if self._closed:
+            raise RuntimeError("DiscoverHosts instance is closed")
         current_signature = await self._loop.run_in_executor(
             None, resolv_conf_signature
         )

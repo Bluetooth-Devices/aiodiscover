@@ -4,7 +4,7 @@ import sys
 from dataclasses import dataclass
 from ipaddress import IPv4Address, IPv4Network
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiodns
 import pycares
@@ -828,3 +828,102 @@ async def test_no_recurse_true_explicit() -> None:
         mock_resolver_class.assert_called_once_with(
             timeout=discovery.DNS_RESPONSE_TIMEOUT, flags=pycares.ARES_FLAG_NORECURSE
         )
+
+
+@pytest.mark.asyncio
+async def test_close_releases_resolver_and_ip_route() -> None:
+    """close() awaits the resolver and closes a held pyroute2 IPRoute."""
+    fake_resolver = MagicMock()
+    fake_resolver.close = AsyncMock()
+    fake_ip_route = MagicMock()
+    async with discovery.DiscoverHosts() as discover_hosts:
+        discover_hosts._resolver = fake_resolver
+        discover_hosts._sys_network_data = MagicMock(ip_route=fake_ip_route)
+
+    fake_resolver.close.assert_awaited_once()
+    fake_ip_route.close.assert_called_once()
+    assert discover_hosts._sys_network_data is None
+
+
+@pytest.mark.asyncio
+async def test_close_when_no_sys_network_data() -> None:
+    """close() works even if async_discover was never called."""
+    fake_resolver = MagicMock()
+    fake_resolver.close = AsyncMock()
+    async with discovery.DiscoverHosts() as discover_hosts:
+        discover_hosts._resolver = fake_resolver
+
+    fake_resolver.close.assert_awaited_once()
+    assert discover_hosts._sys_network_data is None
+
+
+@pytest.mark.asyncio
+async def test_close_tolerates_ip_route_close_error() -> None:
+    """A pyroute2 close exception does not propagate out of close()."""
+    fake_resolver = MagicMock()
+    fake_resolver.close = AsyncMock()
+    fake_ip_route = MagicMock()
+    fake_ip_route.close.side_effect = OSError("already closed")
+    async with discovery.DiscoverHosts() as discover_hosts:
+        discover_hosts._resolver = fake_resolver
+        discover_hosts._sys_network_data = MagicMock(ip_route=fake_ip_route)
+
+    fake_resolver.close.assert_awaited_once()
+    assert discover_hosts._sys_network_data is None
+
+
+@pytest.mark.asyncio
+async def test_async_context_manager_returns_self() -> None:
+    """`async with DiscoverHosts()` yields the instance itself."""
+    discover_hosts = discovery.DiscoverHosts()
+    async with discover_hosts as ctx:
+        assert ctx is discover_hosts
+
+
+@pytest.mark.asyncio
+async def test_close_with_real_resolver() -> None:
+    """End-to-end: close() succeeds against the real aiodns DNSResolver."""
+    async with discovery.DiscoverHosts():
+        pass
+
+
+@pytest.mark.asyncio
+async def test_close_is_idempotent() -> None:
+    """A second close() call is a no-op and does not re-await the resolver."""
+    discover_hosts = discovery.DiscoverHosts()
+    fake_resolver = MagicMock()
+    fake_resolver.close = AsyncMock()
+    discover_hosts._resolver = fake_resolver
+
+    await discover_hosts.close()
+    await discover_hosts.close()
+
+    fake_resolver.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_close_clears_ip_route_when_resolver_close_raises() -> None:
+    """If resolver.close() raises, the pyroute2 socket is still released."""
+    discover_hosts = discovery.DiscoverHosts()
+    fake_resolver = MagicMock()
+    fake_resolver.close = AsyncMock(side_effect=RuntimeError("boom"))
+    discover_hosts._resolver = fake_resolver
+
+    fake_ip_route = MagicMock()
+    fake_net_data = MagicMock(ip_route=fake_ip_route)
+    discover_hosts._sys_network_data = fake_net_data
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await discover_hosts.close()
+
+    fake_ip_route.close.assert_called_once()
+    assert discover_hosts._sys_network_data is None
+
+
+@pytest.mark.asyncio
+async def test_async_discover_after_close_raises() -> None:
+    """async_discover() on a closed instance raises RuntimeError."""
+    async with discovery.DiscoverHosts() as discover_hosts:
+        pass
+    with pytest.raises(RuntimeError, match="closed"):
+        await discover_hosts.async_discover()
