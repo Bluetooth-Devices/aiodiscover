@@ -1,6 +1,6 @@
 [project]
 name = "aiodiscover"
-version = "3.0.3"
+version = "3.0.4"
 license = "Apache-2.0"
 description = "Discover hosts by arp and ptr lookup"
 authors = [{ name = "J. Nick Koston", email = "nick@koston.org" }]
