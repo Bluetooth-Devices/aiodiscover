@@ -7,6 +7,7 @@ import socket
 import subprocess
 import sys
 from contextlib import suppress
+from dataclasses import dataclass
 from ipaddress import IPv4Address, IPv4Network, IPv6Address, ip_network
 from typing import TYPE_CHECKING, Any
 
@@ -47,23 +48,33 @@ IGNORE_MACS = {"00:00:00:00:00:00", "ff:ff:ff:ff:ff:ff"}
 RESOLV_CONF_PATH = "/etc/resolv.conf"
 
 
+@dataclass(frozen=True, slots=True)
+class ResolvConfSignature:
+    """Signature describing resolv.conf at a point in time."""
+
+    mtime_ns: int
+    size: int
+
+
 def load_resolv_conf_with_signature() -> tuple[
-    tuple[int, int], list[IPv4Address | IPv6Address]
+    ResolvConfSignature, list[IPv4Address | IPv6Address]
 ]:
     """Load resolv.conf and return (signature, nameservers) from the same fd."""
     with open(RESOLV_CONF_PATH) as file:
         stat = os.fstat(file.fileno())
         lines = tuple(file)
-    return (stat.st_mtime_ns, stat.st_size), parse_resolv_conf(lines)
+    return ResolvConfSignature(stat.st_mtime_ns, stat.st_size), parse_resolv_conf(
+        lines
+    )
 
 
-def resolv_conf_signature() -> tuple[int, int] | None:
+def resolv_conf_signature() -> ResolvConfSignature | None:
     """Return a signature describing the current resolv.conf, or None if missing."""
     try:
         stat = os.stat(RESOLV_CONF_PATH)
     except OSError:
         return None
-    return (stat.st_mtime_ns, stat.st_size)
+    return ResolvConfSignature(stat.st_mtime_ns, stat.st_size)
 
 
 def parse_resolv_conf(lines: Iterable[str]) -> list[IPv4Address | IPv6Address]:
@@ -197,7 +208,7 @@ class SystemNetworkData:
     nameservers: list[IPv4Address | IPv6Address]
     router_ip: IPv4Address | None = None
     local_ip: IPv4Address | None = None
-    resolv_conf_signature: tuple[int, int] | None = None
+    resolv_conf_signature: ResolvConfSignature | None = None
 
     def __init__(self, ip_route: IPRoute | None, local_ip: str | None = None) -> None:
         """Init system network data."""

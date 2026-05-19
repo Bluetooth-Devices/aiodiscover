@@ -19,6 +19,8 @@ if TYPE_CHECKING:
 
     from pyroute2.iproute import IPRoute
 
+    from .network import ResolvConfSignature
+
 HOSTNAME = "hostname"
 MAC_ADDRESS = "macaddress"
 IP_ADDRESS = "ip"
@@ -128,7 +130,7 @@ class DiscoverHosts:
         loop = asyncio.get_running_loop()
         self._loop = loop
         self._sys_network_data: SystemNetworkData | None = None
-        self._resolv_conf_signature: tuple[int, int] | None = None
+        self._resolv_conf_signature: ResolvConfSignature | None = None
         self._failed_nameservers: set[IPv4Address | IPv6Address] = set()
         self._last_cache_clear = loop.time()
 

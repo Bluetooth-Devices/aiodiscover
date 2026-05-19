@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from aiodiscover.network import (
+    ResolvConfSignature,
     SystemNetworkData,
     _fill_neighbor,
     _get_macos_default_gateway,
@@ -67,7 +68,8 @@ def test_resolv_conf_signature_returns_stat_tuple(tmp_path: Path) -> None:
     with patch("aiodiscover.network.RESOLV_CONF_PATH", str(resolv)):
         first = resolv_conf_signature()
         assert first is not None
-        assert first[1] == len(first_bytes)
+        assert isinstance(first, ResolvConfSignature)
+        assert first.size == len(first_bytes)
         # Rewrite with different content; size changes -> signature changes.
         resolv.write_bytes(b"nameserver 8.8.8.8\nnameserver 1.1.1.1\n")
         second = resolv_conf_signature()
@@ -119,8 +121,8 @@ def test_load_resolv_conf_with_signature_matches_fstat(tmp_path: Path) -> None:
     resolv.write_bytes(payload)
     with patch("aiodiscover.network.RESOLV_CONF_PATH", str(resolv)):
         signature, nameservers = load_resolv_conf_with_signature()
-    assert signature is not None
-    assert signature[1] == len(payload)
+    assert isinstance(signature, ResolvConfSignature)
+    assert signature.size == len(payload)
     assert nameservers == [IPv4Address("192.168.1.53"), IPv4Address("1.1.1.1")]
 
 
