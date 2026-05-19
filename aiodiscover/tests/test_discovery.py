@@ -463,15 +463,6 @@ async def test_async_get_hostnames_first_nameserver_fails() -> None:
         assert discover_hosts._failed_nameservers == {IPv4Address("172.0.0.3")}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "PR #234: async_query_for_ptrs returns [None] * N on a silently-timing-out "
-        "nameserver, not []. The `if not results` guard in async_get_hostnames "
-        "never fires, so dead resolvers are not cached and get re-queried every "
-        "discovery cycle. Remove this marker once #234 lands."
-    ),
-)
 @pytest.mark.asyncio
 async def test_silent_nameserver_timeout_is_blacklisted() -> None:
     """Pin: a fully silent nameserver must land in _failed_nameservers."""
@@ -504,14 +495,6 @@ async def test_silent_nameserver_timeout_is_blacklisted() -> None:
     assert discover_hosts._failed_nameservers == {IPv4Address("172.0.0.3")}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "PR #234: silent-timeout nameservers never enter _failed_nameservers, so "
-        "the second discovery cycle re-queries the dead resolver and pays the "
-        "DNS_RESPONSE_TIMEOUT budget again. Remove this marker once #234 lands."
-    ),
-)
 @pytest.mark.asyncio
 async def test_silent_nameserver_skipped_on_second_run() -> None:
     """Pin: a silently-failed nameserver must not be queried on the next run."""
