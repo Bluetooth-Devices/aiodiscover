@@ -63,9 +63,7 @@ def load_resolv_conf_with_signature() -> tuple[
     with open(RESOLV_CONF_PATH) as file:
         stat = os.fstat(file.fileno())
         lines = tuple(file)
-    return ResolvConfSignature(stat.st_mtime_ns, stat.st_size), parse_resolv_conf(
-        lines
-    )
+    return ResolvConfSignature(stat.st_mtime_ns, stat.st_size), parse_resolv_conf(lines)
 
 
 def resolv_conf_signature() -> ResolvConfSignature | None:
