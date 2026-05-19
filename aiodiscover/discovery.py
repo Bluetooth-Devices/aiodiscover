@@ -157,8 +157,9 @@ class DiscoverHosts:
         """
         Release the underlying DNS resolver and pyroute2 socket.
 
-        After close() the instance must not be reused; calling close()
-        again is a no-op.
+        After close() the instance must not be reused: calling
+        async_discover() raises RuntimeError. A second close() is a
+        no-op.
         """
         if self._closed:
             return
@@ -199,6 +200,8 @@ class DiscoverHosts:
 
     async def async_discover(self) -> list[dict[str, str]]:
         """Discover hosts on the network by ARP and PTR lookup."""
+        if self._closed:
+            raise RuntimeError("DiscoverHosts instance is closed")
         current_signature = await self._loop.run_in_executor(
             None, resolv_conf_signature
         )
