@@ -228,20 +228,20 @@ python = "<3.11" }` — needed only for the 3.10 leg, paired
 
 ## Useful entry points
 
-| Path                                  | What                                                                  |
-| ------------------------------------- | --------------------------------------------------------------------- |
-| `aiodiscover/__init__.py`             | Package entry point — re-exports `DiscoverHosts`, holds `__version__` |
-| `aiodiscover/discovery.py`            | `DiscoverHosts` class + DNS PTR resolution + chunking / batching      |
-| `aiodiscover/network.py`              | `SystemNetworkData` — ARP + interface enumeration; platform branches  |
-| `aiodiscover/util.py`                 | `asyncio_timeout` compat shim (3.10 → `async_timeout`, 3.11+ stdlib)  |
-| `aiodiscover/tests/test_discovery.py` | Tests for `DiscoverHosts` and the DNS PTR pipeline                    |
-| `aiodiscover/tests/test_network.py`   | Tests for ARP cache reading and interface enumeration                 |
-| `aiodiscover/tests/test_init.py`      | Smoke test for top-level imports                                      |
-| `aiodiscover/tests/conftest.py`       | Shared pytest fixtures                                                |
-| `pyproject.toml`                      | Poetry config + ruff / mypy / pytest / semantic-release settings      |
-| `.pre-commit-config.yaml`             | Pre-commit hook set (ruff, mypy, prettier, codespell, …)              |
+| Path                                  | What                                                                   |
+| ------------------------------------- | ---------------------------------------------------------------------- |
+| `aiodiscover/__init__.py`             | Package entry point — re-exports `DiscoverHosts`, holds `__version__`  |
+| `aiodiscover/discovery.py`            | `DiscoverHosts` class + DNS PTR resolution + chunking / batching       |
+| `aiodiscover/network.py`              | `SystemNetworkData` — ARP + interface enumeration; platform branches   |
+| `aiodiscover/util.py`                 | `asyncio_timeout` compat shim (3.10 → `async_timeout`, 3.11+ stdlib)   |
+| `aiodiscover/tests/test_discovery.py` | Tests for `DiscoverHosts` and the DNS PTR pipeline                     |
+| `aiodiscover/tests/test_network.py`   | Tests for ARP cache reading and interface enumeration                  |
+| `aiodiscover/tests/test_init.py`      | Smoke test for top-level imports                                       |
+| `aiodiscover/tests/conftest.py`       | Shared pytest fixtures                                                 |
+| `pyproject.toml`                      | Poetry config + ruff / mypy / pytest / semantic-release settings       |
+| `.pre-commit-config.yaml`             | Pre-commit hook set (ruff, mypy, prettier, codespell, …)               |
 | `.github/workflows/ci.yml`            | Lint + PR-title check + matrix tests + semantic-release / PyPI publish |
-| `.github/PULL_REQUEST_TEMPLATE.md`    | PR template — description + checklist                                 |
+| `.github/PULL_REQUEST_TEMPLATE.md`    | PR template — description + checklist                                  |
 
 ## Documentation drift
 
