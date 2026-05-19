@@ -340,6 +340,28 @@ async def test_async_get_neighbours_repopulates_arp_for_missing_ips() -> None:
 
 
 @pytest.mark.asyncio
+async def test_async_get_neighbours_closes_arp_socket_on_cancel() -> None:
+    """A CancelledError during the ARP populate sleep still closes the socket."""
+    net_data = SystemNetworkData(MagicMock())
+    sock = MagicMock()
+    with (
+        patch.object(
+            net_data,
+            "_async_get_neighbours",
+            AsyncMock(return_value={}),
+        ),
+        patch("aiodiscover.network.async_populate_arp", return_value=sock),
+        patch(
+            "aiodiscover.network.asyncio.sleep",
+            AsyncMock(side_effect=asyncio.CancelledError()),
+        ),
+        pytest.raises(asyncio.CancelledError),
+    ):
+        await net_data.async_get_neighbours(["192.168.1.5"])
+    sock.close.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_async_get_neighbours_ip_route_parses_attrs() -> None:
     """The pyroute2 path extracts NDA_DST + NDA_LLADDR per neighbour."""
     ip_route = MagicMock()
