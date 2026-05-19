@@ -214,6 +214,47 @@ async def test_async_query_for_ptrs_chunked() -> None:
 
 
 @pytest.mark.asyncio
+async def test_async_query_for_ptrs_pending_futures_marked_none() -> None:
+    """Futures that never complete are cancelled and recorded as failures."""
+    loop = asyncio.get_running_loop()
+    count = 0
+    pending_future: asyncio.Future[Any] | None = None
+
+    def mock_query(*args: Any, **kwargs: Any) -> Any:
+        nonlocal count, pending_future
+        count += 1
+        future = loop.create_future()
+        if count == 2:
+            # Never resolve — simulates a wedged resolver / black-holed UDP.
+            pending_future = future
+        else:
+            future.set_result(MockReply(name=f"name{count}"))
+        return future
+
+    with (
+        patch.object(discovery, "DNS_RESPONSE_TIMEOUT", 0),
+        patch("aiodiscover.discovery.DNSResolver.query", mock_query),
+    ):
+        resolver = aiodns.DNSResolver(timeout=0)
+        resolver.nameservers = ["192.168.107.1"]
+        response = await discovery.async_query_for_ptrs(
+            resolver,
+            [
+                IPv4Address("192.168.107.2"),
+                IPv4Address("192.168.107.3"),
+                IPv4Address("192.168.107.4"),
+            ],
+        )
+
+    assert len(response) == 3
+    assert response[0].name == "name1"  # type: ignore
+    assert response[1] is None
+    assert response[2].name == "name3"  # type: ignore
+    assert pending_future is not None
+    assert pending_future.cancelled()
+
+
+@pytest.mark.asyncio
 async def test_async_get_hostnames_no_results() -> None:
     """Verify async_get_hostnames with no results."""
     discover_hosts = discovery.DiscoverHosts()
