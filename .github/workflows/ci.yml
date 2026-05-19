@@ -69,7 +69,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: .venv
-          key: venv-v1-${{ runner.os }}-py${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('poetry.lock', 'pyproject.toml') }}
+          key: venv-v1-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('poetry.lock', 'pyproject.toml') }}
       - name: Install Dependencies
         if: steps.cache-venv.outputs.cache-hit != 'true'
         run: |
