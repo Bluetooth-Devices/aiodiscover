@@ -252,19 +252,12 @@ class DiscoverHosts:
             results = await async_query_for_ptrs(self._resolver, ips_to_lookup)
             added_any = False
             for idx, ip in enumerate(ips_to_lookup):
-                if idx >= len(results):
-                    break
                 short_host = dns_message_short_hostname(results[idx])
                 if short_host is None:
                     continue
                 hostnames[str(ip)] = short_host
                 added_any = True
             if not added_any:
-                # async_query_for_ptrs always returns one slot per IP (None on
-                # timeout / NXDOMAIN), so a fully unresponsive nameserver is
-                # invisible to a `not results` check — the list is full of
-                # Nones, not empty. Track contribution explicitly so the cache
-                # actually skips dead resolvers on the next run.
                 _LOGGER.debug("No usable PTRs from %s", nameserver)
                 failed_nameservers_this_run.add(nameserver)
                 continue

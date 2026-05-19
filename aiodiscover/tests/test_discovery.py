@@ -262,13 +262,17 @@ async def test_async_get_hostnames_no_results() -> None:
     net_data.router_ip = IPv4Address("192.168.0.1")
     net_data.network = IPv4Network("192.168.0.0/24")
     net_data.nameservers = [IPv4Address("172.0.0.3"), IPv4Address("172.0.0.4")]
+    subnet_size = len(list(net_data.network.hosts()))
     with (
         patch.object(
             net_data,
             "async_get_neighbours",
             return_value={},
         ),
-        patch("aiodiscover.discovery.async_query_for_ptrs", return_value={}),
+        patch(
+            "aiodiscover.discovery.async_query_for_ptrs",
+            return_value=[None] * subnet_size,
+        ),
     ):
         hostnames = await discover_hosts.async_get_hostnames(net_data)
 
