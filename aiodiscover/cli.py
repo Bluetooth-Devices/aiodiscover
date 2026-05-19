@@ -107,7 +107,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _sanitize_host(host: dict[str, str]) -> dict[str, str]:
     """Return a copy of ``host`` with each known field length-capped + printable-only."""
-    return {key: safe_label_str(host.get(key, ""), limit) for key, limit in _FIELD_LIMITS.items()}
+    return {
+        key: safe_label_str(host.get(key, ""), limit)
+        for key, limit in _FIELD_LIMITS.items()
+    }
 
 
 def _ip_sort_key(host: dict[str, str]) -> tuple[int, object]:
@@ -125,11 +128,16 @@ def _render_table(hosts: list[dict[str, str]]) -> str:
     headers = [label for label, _ in _TABLE_COLUMNS]
     rows = [[host[field] for _, field in _TABLE_COLUMNS] for host in hosts]
     widths = [
-        max(len(headers[i]), *(len(row[i]) for row in rows)) if rows else len(headers[i])
+        max(len(headers[i]), *(len(row[i]) for row in rows))
+        if rows
+        else len(headers[i])
         for i in range(len(headers))
     ]
     fmt = "  ".join(f"{{: <{w}}}" for w in widths)
-    lines = [fmt.format(*headers).rstrip(), fmt.format(*("-" * w for w in widths)).rstrip()]
+    lines = [
+        fmt.format(*headers).rstrip(),
+        fmt.format(*("-" * w for w in widths)).rstrip(),
+    ]
     lines.extend(fmt.format(*row).rstrip() for row in rows)
     return "\n".join(lines) + "\n"
 
