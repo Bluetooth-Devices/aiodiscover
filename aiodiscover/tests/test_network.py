@@ -439,6 +439,36 @@ async def test_async_get_neighbours_arp_cancellation_reaps_proc() -> None:
 
 
 @pytest.mark.asyncio
+async def test_async_get_neighbours_arp_task_cancel_reaps_proc() -> None:
+    """External task.cancel() during communicate kills and reaps before propagating."""
+    communicate_started = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    block: asyncio.Future[tuple[bytes, bytes]] = loop.create_future()
+
+    async def blocking_communicate() -> tuple[bytes, bytes]:
+        communicate_started.set()
+        return await block
+
+    proc = MagicMock()
+    proc.communicate = blocking_communicate
+    proc.kill = MagicMock()
+    proc.wait = AsyncMock()
+    proc.returncode = None
+    net_data = SystemNetworkData(None)
+    with patch(
+        "aiodiscover.network.asyncio.create_subprocess_exec",
+        AsyncMock(return_value=proc),
+    ):
+        task = asyncio.create_task(net_data._async_get_neighbours_arp())
+        await communicate_started.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    proc.kill.assert_called_once_with()
+    proc.wait.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
 async def test_async_get_neighbours_arp_normal_exit_does_not_kill() -> None:
     """A natural exit leaves the proc alone — no spurious kill on success."""
     proc = MagicMock()

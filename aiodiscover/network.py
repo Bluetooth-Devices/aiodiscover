@@ -345,9 +345,17 @@ class SystemNetworkData:
 
 
 async def _reap_subprocess(proc: asyncio.subprocess.Process) -> None:
-    """Kill and wait on a subprocess if it has not already exited."""
-    if proc.returncode is None:
-        with suppress(ProcessLookupError):
-            proc.kill()
-        with suppress(OSError):
-            await proc.wait()
+    """Kill and shielded-wait a subprocess so re-cancellation cannot strand it."""
+    if proc.returncode is not None:
+        return
+    with suppress(ProcessLookupError):
+        proc.kill()
+    waiter = asyncio.ensure_future(proc.wait())
+    try:
+        await asyncio.shield(waiter)
+    except asyncio.CancelledError:
+        with suppress(asyncio.CancelledError, OSError):
+            await waiter
+        raise
+    except OSError:
+        pass
