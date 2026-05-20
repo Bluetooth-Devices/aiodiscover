@@ -302,13 +302,16 @@ class SystemNetworkData:
         except OSError:
             return neighbours
         try:
-            try:
-                async with asyncio_timeout(ARP_TIMEOUT):
-                    out_data, _ = await arp.communicate()
-            except asyncio.TimeoutError:
-                return neighbours
-        finally:
-            await _reap_subprocess(arp)
+            async with asyncio_timeout(ARP_TIMEOUT):
+                out_data, _ = await arp.communicate()
+        except (asyncio.TimeoutError, asyncio.CancelledError) as exc:
+            with suppress(ProcessLookupError):
+                arp.kill()
+            with suppress(OSError):
+                await arp.wait()
+            if isinstance(exc, asyncio.CancelledError):
+                raise
+            return neighbours
 
         for line in out_data.decode().splitlines():
             chomped = line.strip()
@@ -342,20 +345,3 @@ class SystemNetworkData:
                 _fill_neighbor(neighbours, ip, mac)
 
         return neighbours
-
-
-async def _reap_subprocess(proc: asyncio.subprocess.Process) -> None:
-    """Kill and shielded-wait a subprocess so re-cancellation cannot strand it."""
-    if proc.returncode is not None:
-        return
-    with suppress(ProcessLookupError):
-        proc.kill()
-    waiter = asyncio.create_task(proc.wait())
-    try:
-        await asyncio.shield(waiter)
-    except asyncio.CancelledError:
-        with suppress(asyncio.CancelledError, OSError):
-            await waiter
-        raise
-    except OSError:
-        pass
