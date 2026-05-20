@@ -82,7 +82,10 @@ async def async_query_for_ptrs(
     # does not cancel its wrapped futures when its task is cancelled, so we
     # must do it ourselves to keep pycares from leaking query slots and from
     # later firing "exception was never retrieved" warnings.
-    in_flight: list[asyncio.Future[Any]] = []
+    # aiodns' PTR overload returns `asyncio.Future[list[pycares.ares_query_ptr_result]]`,
+    # but pycares ships no stubs so mypy degrades the inner type to `Any`; `list[Any]`
+    # is the tightest annotation that doesn't disagree with what aiodns hands us.
+    in_flight: list[asyncio.Future[list[Any]]] = []
     try:
         for ip_chunk in chunked(ips_to_lookup, QUERY_BUCKET_SIZE):
             if TYPE_CHECKING:
