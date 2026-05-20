@@ -92,23 +92,18 @@ async def test_async_query_for_ptrs() -> None:
             future.set_result(MockReply(name=f"name{count}"))
         return future
 
-    with (
-        patch.object(discovery, "DNS_RESPONSE_TIMEOUT", 0),
-        patch("aiodiscover.discovery.DNSResolver.query", mock_query),
-    ):
-        resolver = aiodns.DNSResolver(timeout=0)
-        try:
-            resolver.nameservers = ["192.168.107.1"]
-            response = await discovery.async_query_for_ptrs(
-                resolver,
-                [
-                    IPv4Address("192.168.107.2"),
-                    IPv4Address("192.168.107.3"),
-                    IPv4Address("192.168.107.4"),
-                ],
-            )
-        finally:
-            await resolver.close()
+    resolver = MagicMock(spec=aiodns.DNSResolver)
+    resolver.query.side_effect = mock_query
+    resolver.nameservers = ["192.168.107.1"]
+    with patch.object(discovery, "DNS_RESPONSE_TIMEOUT", 0):
+        response = await discovery.async_query_for_ptrs(
+            resolver,
+            [
+                IPv4Address("192.168.107.2"),
+                IPv4Address("192.168.107.3"),
+                IPv4Address("192.168.107.4"),
+            ],
+        )
 
     assert len(response) == 3
     assert response[0].name == "name1"  # type: ignore
@@ -197,24 +192,21 @@ async def test_async_query_for_ptrs_chunked() -> None:
             future.set_result(MockReply(name=f"name{count}"))
         return future
 
+    resolver = MagicMock(spec=aiodns.DNSResolver)
+    resolver.query.side_effect = mock_query
+    resolver.nameservers = ["192.168.107.1"]
     with (
         patch.object(discovery, "DNS_RESPONSE_TIMEOUT", 0),
-        patch("aiodiscover.discovery.DNSResolver.query", mock_query),
         patch.object(discovery, "QUERY_BUCKET_SIZE", 1),
     ):
-        resolver = aiodns.DNSResolver(timeout=0)
-        try:
-            resolver.nameservers = ["192.168.107.1"]
-            response = await discovery.async_query_for_ptrs(
-                resolver,
-                [
-                    IPv4Address("192.168.107.2"),
-                    IPv4Address("192.168.107.3"),
-                    IPv4Address("192.168.107.4"),
-                ],
-            )
-        finally:
-            await resolver.close()
+        response = await discovery.async_query_for_ptrs(
+            resolver,
+            [
+                IPv4Address("192.168.107.2"),
+                IPv4Address("192.168.107.3"),
+                IPv4Address("192.168.107.4"),
+            ],
+        )
 
     assert len(response) == 3
     assert response[0].name == "name1"  # type: ignore
@@ -240,23 +232,18 @@ async def test_async_query_for_ptrs_pending_futures_marked_none() -> None:
             future.set_result(MockReply(name=f"name{count}"))
         return future
 
-    with (
-        patch.object(discovery, "DNS_RESPONSE_TIMEOUT", 0),
-        patch("aiodiscover.discovery.DNSResolver.query", mock_query),
-    ):
-        resolver = aiodns.DNSResolver(timeout=0)
-        try:
-            resolver.nameservers = ["192.168.107.1"]
-            response = await discovery.async_query_for_ptrs(
-                resolver,
-                [
-                    IPv4Address("192.168.107.2"),
-                    IPv4Address("192.168.107.3"),
-                    IPv4Address("192.168.107.4"),
-                ],
-            )
-        finally:
-            await resolver.close()
+    resolver = MagicMock(spec=aiodns.DNSResolver)
+    resolver.query.side_effect = mock_query
+    resolver.nameservers = ["192.168.107.1"]
+    with patch.object(discovery, "DNS_RESPONSE_TIMEOUT", 0):
+        response = await discovery.async_query_for_ptrs(
+            resolver,
+            [
+                IPv4Address("192.168.107.2"),
+                IPv4Address("192.168.107.3"),
+                IPv4Address("192.168.107.4"),
+            ],
+        )
 
     assert len(response) == 3
     assert response[0].name == "name1"  # type: ignore
