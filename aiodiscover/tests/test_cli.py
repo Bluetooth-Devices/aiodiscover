@@ -4,7 +4,8 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
-from unittest.mock import AsyncMock, MagicMock, _patch, patch
+from contextlib import AbstractContextManager
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -24,7 +25,7 @@ SAMPLE_HOSTS = [
 
 def _patch_discover(
     hosts: list[dict[str, str]] | None = None,
-) -> _patch[MagicMock]:
+) -> AbstractContextManager[MagicMock]:
     instance = MagicMock()
     instance.async_discover = AsyncMock(
         return_value=SAMPLE_HOSTS if hosts is None else hosts
@@ -95,6 +96,22 @@ def test_main_table_sorts_by_ip_numerically(
     out = capsys.readouterr().out.splitlines()
     assert out[2].startswith("b")
     assert out[3].startswith("a")
+
+
+def test_main_table_sorts_malformed_ip_last(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    hosts = [
+        {"hostname": "bogus", "ip": "not-an-ip", "macaddress": "aa:bb:cc:dd:ee:01"},
+        {"hostname": "v4host", "ip": "10.0.0.1", "macaddress": "aa:bb:cc:dd:ee:02"},
+        {"hostname": "v6host", "ip": "fe80::1", "macaddress": "aa:bb:cc:dd:ee:03"},
+    ]
+    with _patch_discover(hosts):
+        cli.main([])
+    out = capsys.readouterr().out.splitlines()
+    assert out[2].startswith("v4host")
+    assert out[3].startswith("v6host")
+    assert out[4].startswith("bogus")
 
 
 def test_main_table_empty(capsys: pytest.CaptureFixture[str]) -> None:
