@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 from functools import lru_cache, partial
 from itertools import islice
@@ -135,6 +136,15 @@ class DiscoverHosts:
         self._failed_nameservers: set[IPv4Address | IPv6Address] = set()
         self._last_cache_clear = loop.time()
         self._closed = False
+        # Single-worker pool so pyroute2 IPRoute lives on one OS thread.
+        # IPRoute caches its internal asyncio event loop in `threading.local()`;
+        # crossing threads spins up a fresh loop and leaks the previous one
+        # (transport + datagram socket). Pinning every IPRoute call —
+        # construction, get_neighbours, close — to this executor keeps the
+        # cached loop reachable so close() can tear it down.
+        self._iproute_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="aiodiscover-iproute"
+        )
 
         # Create resolver with optional no_recurse flag
         if no_recurse:
@@ -170,17 +180,23 @@ class DiscoverHosts:
         try:
             await self._resolver.close()
         finally:
-            self._release_sys_network_data()
+            try:
+                await self._release_sys_network_data()
+            finally:
+                self._iproute_executor.shutdown(wait=True)
 
-    def _release_sys_network_data(self) -> None:
+    async def _release_sys_network_data(self) -> None:
         """Close the pyroute2 IPRoute socket and drop the cached network data."""
         if self._sys_network_data is None:
             return
         ip_route = self._sys_network_data.ip_route
-        if ip_route is not None:
-            with suppress(OSError):
-                ip_route.close()
         self._sys_network_data = None
+        if ip_route is None:
+            return
+        with suppress(OSError):
+            # ip_route.close() must run on the construction thread so it can
+            # see the thread-local transport / event loop and tear them down.
+            await self._loop.run_in_executor(self._iproute_executor, ip_route.close)
 
     def _setup_sys_network_data(self) -> SystemNetworkData:
         ip_route: IPRoute | None = None
@@ -188,7 +204,9 @@ class DiscoverHosts:
             from pyroute2.iproute import IPRoute
 
             ip_route = IPRoute()
-        sys_network_data = SystemNetworkData(ip_route)
+        sys_network_data = SystemNetworkData(
+            ip_route, iproute_executor=self._iproute_executor
+        )
         try:
             sys_network_data.setup()
         except BaseException:
@@ -231,12 +249,12 @@ class DiscoverHosts:
                 "resolv.conf changed; reloading network data and "
                 "clearing failed nameservers cache",
             )
-            self._release_sys_network_data()
+            await self._release_sys_network_data()
             self._failed_nameservers.clear()
 
         if not self._sys_network_data:
             self._sys_network_data = await self._loop.run_in_executor(
-                None,
+                self._iproute_executor,
                 self._setup_sys_network_data,
             )
             # Cache the in-fd signature — the upfront stat can disagree if

@@ -940,6 +940,75 @@ async def test_async_discover_after_close_raises() -> None:
         await discover_hosts.async_discover()
 
 
+@pytest.mark.asyncio
+async def test_iproute_calls_pinned_to_single_thread() -> None:
+    """Pin IPRoute construction, get_neighbours, and close to one OS thread."""
+    import threading
+
+    construction_thread: list[int] = []
+    get_neighbours_thread: list[int] = []
+    close_thread: list[int] = []
+
+    fake_resolver = MagicMock()
+    fake_resolver.close = AsyncMock()
+
+    fake_ip_route = MagicMock()
+
+    def record_get_neighbours() -> list[Any]:
+        get_neighbours_thread.append(threading.get_ident())
+        return [
+            {
+                "attrs": [
+                    ("NDA_DST", "192.168.0.1"),
+                    ("NDA_LLADDR", "aa:bb:cc:dd:ee:ff"),
+                ],
+            }
+        ]
+
+    def record_close() -> None:
+        close_thread.append(threading.get_ident())
+
+    fake_ip_route.get_neighbours.side_effect = record_get_neighbours
+    fake_ip_route.close.side_effect = record_close
+
+    import pyroute2.iproute as pyroute2_iproute
+
+    def fake_iproute_ctor(*args: Any, **kwargs: Any) -> MagicMock:
+        construction_thread.append(threading.get_ident())
+        return fake_ip_route
+
+    with (
+        patch("aiodiscover.discovery.DNSResolver", return_value=fake_resolver),
+        patch.object(pyroute2_iproute, "IPRoute", side_effect=fake_iproute_ctor),
+    ):
+        discover_hosts = discovery.DiscoverHosts()
+
+    from aiodiscover.network import SystemNetworkData
+
+    fake_net_data = SystemNetworkData(
+        fake_ip_route, iproute_executor=discover_hosts._iproute_executor
+    )
+    fake_net_data.network = IPv4Network("192.168.0.0/30")
+    fake_net_data.nameservers = []
+    discover_hosts._sys_network_data = fake_net_data
+
+    # Force the executor to actually spawn its single worker thread by
+    # running a sentinel task and recording where it lands.
+    await asyncio.get_running_loop().run_in_executor(
+        discover_hosts._iproute_executor, fake_ip_route.get_neighbours
+    )
+    await fake_net_data.async_get_neighbours(["192.168.0.1"])
+
+    await discover_hosts.close()
+
+    assert len(get_neighbours_thread) >= 2
+    assert len(close_thread) == 1
+    assert get_neighbours_thread[0] == get_neighbours_thread[-1]
+    assert get_neighbours_thread[0] == close_thread[0]
+    # And not the main asyncio loop thread.
+    assert close_thread[0] != threading.get_ident()
+
+
 @pytest.mark.skipif(
     sys.platform == "win32",
     reason="pyroute2.iproute imports fcntl, which is not available on Windows",
@@ -1113,5 +1182,3 @@ async def test_resolv_conf_reload_tolerates_old_ip_route_close_error() -> None:
 
     assert discover_hosts._sys_network_data is net_data_2
     fake_ip_route_1.close.assert_called_once()
-
-    await discover_hosts.close()

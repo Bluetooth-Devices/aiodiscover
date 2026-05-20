@@ -19,6 +19,7 @@ from .util import asyncio_timeout
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+    from concurrent.futures import Executor
 
     from pyroute2.iproute import IPRoute
 # Some MAC addresses will drop the leading zero so
@@ -221,10 +222,22 @@ class SystemNetworkData:
     local_ip: IPv4Address | None = None
     resolv_conf_signature: ResolvConfSignature | None = None
 
-    def __init__(self, ip_route: IPRoute | None, local_ip: str | None = None) -> None:
+    def __init__(
+        self,
+        ip_route: IPRoute | None,
+        local_ip: str | None = None,
+        *,
+        iproute_executor: Executor | None = None,
+    ) -> None:
         """Init system network data."""
         self.ip_route = ip_route
         self.local_ip = _parse_ipv4(local_ip) if local_ip else None
+        # pyroute2's IPRoute keeps its internal asyncio event loop and UDP
+        # transport in `threading.local()`. Calls from a different thread
+        # spin up a fresh loop and leak the previous one. When `iproute_executor`
+        # is supplied (single-worker pool owned by DiscoverHosts) every call
+        # into `ip_route` is pinned to the construction thread.
+        self._iproute_executor = iproute_executor
 
     def setup(self) -> None:
         """Obtain the local network data."""
@@ -331,7 +344,9 @@ class SystemNetworkData:
         # in the executor
         if TYPE_CHECKING:
             assert self.ip_route is not None
-        for neighbour in await loop.run_in_executor(None, self.ip_route.get_neighbours):
+        for neighbour in await loop.run_in_executor(
+            self._iproute_executor, self.ip_route.get_neighbours
+        ):
             ip = None
             mac = None
             for key, value in neighbour["attrs"]:
