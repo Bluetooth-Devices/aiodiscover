@@ -254,6 +254,60 @@ async def test_async_query_for_ptrs_pending_futures_marked_none() -> None:
 
 
 @pytest.mark.asyncio
+async def test_async_query_for_ptrs_cancellation_releases_resolver() -> None:
+    """Outer-task cancellation flushes pycares state and any in-flight futures."""
+    loop = asyncio.get_running_loop()
+    submitted: list[asyncio.Future[Any]] = []
+
+    def mock_query(*args: Any, **kwargs: Any) -> Any:
+        future = loop.create_future()
+        submitted.append(future)
+        return future  # never resolves — caller must cancel us out of it
+
+    resolver = aiodns.DNSResolver(timeout=10)
+    cancel_calls = 0
+
+    def mock_resolver_cancel() -> None:
+        nonlocal cancel_calls
+        cancel_calls += 1
+
+    resolver.cancel = mock_resolver_cancel  # type: ignore[method-assign]
+
+    try:
+        with (
+            patch.object(discovery, "DNS_RESPONSE_TIMEOUT", 10),
+            patch("aiodiscover.discovery.DNSResolver.query", mock_query),
+            patch.object(discovery, "QUERY_BUCKET_SIZE", 2),
+        ):
+            resolver.nameservers = ["192.168.107.1"]
+            task = asyncio.create_task(
+                discovery.async_query_for_ptrs(
+                    resolver,
+                    [
+                        IPv4Address("192.168.107.2"),
+                        IPv4Address("192.168.107.3"),
+                    ],
+                )
+            )
+            # Let the task enter asyncio.wait before cancelling.
+            for _ in range(5):
+                await asyncio.sleep(0)
+                if submitted:
+                    break
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+    finally:
+        # Restore so close() can run without our stub clobbering it.
+        del resolver.cancel
+        await resolver.close()
+
+    assert cancel_calls == 1
+    assert submitted
+    assert all(future.done() for future in submitted)
+
+
+@pytest.mark.asyncio
 async def test_async_get_hostnames_no_results(
     discover_hosts: discovery.DiscoverHosts,
 ) -> None:

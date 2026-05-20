@@ -77,23 +77,36 @@ async def async_query_for_ptrs(
 ) -> list[Any | None]:
     """Fetch PTR records for a list of ips."""
     results: list[Any | None] = []
-    for ip_chunk in chunked(ips_to_lookup, QUERY_BUCKET_SIZE):
-        if TYPE_CHECKING:
-            ip_chunk = cast("list[IPv4Address]", ip_chunk)
-        futures = [resolver.query(ip.reverse_pointer, "PTR") for ip in ip_chunk]
-        # Belt-and-braces outer timeout: aiodns/pycares honour the per-query
-        # `DNS_RESPONSE_TIMEOUT` configured at resolver construction, but a
-        # silent UDP black-hole or a future regression in the resolver could
-        # leave futures pending forever and wedge the discovery loop. Cancel
-        # anything still pending after the budget and treat it as failed.
-        _, pending = await asyncio.wait(futures, timeout=DNS_RESPONSE_TIMEOUT + 1)
-        for future in pending:
-            future.cancel()
-        results.extend(
-            None if (future in pending or future.exception()) else future.result()
-            for future in futures
-        )
-    resolver.cancel()
+    # Track the in-flight futures of the *current* chunk so a cancellation
+    # mid-`asyncio.wait` can be cleaned up in the finally block. asyncio.wait
+    # does not cancel its wrapped futures when its task is cancelled, so we
+    # must do it ourselves to keep pycares from leaking query slots and from
+    # later firing "exception was never retrieved" warnings.
+    in_flight: list[Any] = []
+    try:
+        for ip_chunk in chunked(ips_to_lookup, QUERY_BUCKET_SIZE):
+            if TYPE_CHECKING:
+                ip_chunk = cast("list[IPv4Address]", ip_chunk)
+            futures = [resolver.query(ip.reverse_pointer, "PTR") for ip in ip_chunk]
+            in_flight = futures
+            # Belt-and-braces outer timeout: aiodns/pycares honour the per-query
+            # `DNS_RESPONSE_TIMEOUT` configured at resolver construction, but a
+            # silent UDP black-hole or a future regression in the resolver could
+            # leave futures pending forever and wedge the discovery loop. Cancel
+            # anything still pending after the budget and treat it as failed.
+            _, pending = await asyncio.wait(futures, timeout=DNS_RESPONSE_TIMEOUT + 1)
+            for future in pending:
+                future.cancel()
+            results.extend(
+                None if (future in pending or future.exception()) else future.result()
+                for future in futures
+            )
+            in_flight = []
+    finally:
+        for future in in_flight:
+            if not future.done():
+                future.cancel()
+        resolver.cancel()
     return results
 
 
