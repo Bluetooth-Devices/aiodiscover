@@ -296,6 +296,51 @@ async def test_async_query_for_ptrs_cancellation_releases_resolver() -> None:
 
 
 @pytest.mark.asyncio
+async def test_async_query_for_ptrs_cancellation_retrieves_done_exception() -> None:
+    """Done-with-exception futures get their exception retrieved on cancellation."""
+    loop = asyncio.get_running_loop()
+    submitted: list[asyncio.Future[Any]] = []
+
+    def mock_query(*args: Any, **kwargs: Any) -> Any:
+        future = loop.create_future()
+        if not submitted:
+            future.set_exception(RuntimeError("boom"))
+        submitted.append(future)
+        return future
+
+    resolver = MagicMock(spec=aiodns.DNSResolver)
+    resolver.query.side_effect = mock_query
+    resolver.nameservers = ["192.168.107.1"]
+
+    with (
+        patch.object(discovery, "DNS_RESPONSE_TIMEOUT", 10),
+        patch.object(discovery, "QUERY_BUCKET_SIZE", 2),
+    ):
+        task = asyncio.create_task(
+            discovery.async_query_for_ptrs(
+                resolver,
+                [
+                    IPv4Address("192.168.107.2"),
+                    IPv4Address("192.168.107.3"),
+                ],
+            )
+        )
+        for _ in range(5):
+            await asyncio.sleep(0)
+            if len(submitted) == 2:
+                break
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    assert resolver.cancel.call_count == 1
+    assert submitted[0].done()
+    assert not submitted[0].cancelled()
+    assert submitted[0].exception() is not None
+    assert submitted[1].cancelled()
+
+
+@pytest.mark.asyncio
 async def test_async_get_hostnames_no_results(
     discover_hosts: discovery.DiscoverHosts,
 ) -> None:
