@@ -951,3 +951,172 @@ async def test_async_discover_after_close_raises() -> None:
         pass
     with pytest.raises(RuntimeError, match="closed"):
         await discover_hosts.async_discover()
+
+
+@pytest.mark.asyncio
+async def test_setup_failure_closes_ip_route() -> None:
+    """_setup_sys_network_data closes the IPRoute if SystemNetworkData.setup() raises."""
+    fake_resolver = MagicMock()
+    fake_resolver.close = AsyncMock()
+    fake_ip_route = MagicMock()
+
+    import pyroute2.iproute as pyroute2_iproute
+
+    with (
+        patch("aiodiscover.discovery.DNSResolver", return_value=fake_resolver),
+        patch.object(pyroute2_iproute, "IPRoute", return_value=fake_ip_route),
+        patch(
+            "aiodiscover.network.SystemNetworkData.setup",
+            side_effect=RuntimeError("no local ip"),
+        ),
+    ):
+        async with discovery.DiscoverHosts() as discover_hosts:
+            with pytest.raises(RuntimeError, match="no local ip"):
+                discover_hosts._setup_sys_network_data()
+
+    fake_ip_route.close.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_setup_failure_tolerates_close_error() -> None:
+    """An OSError from IPRoute.close() during a setup failure does not mask the original error."""
+    fake_resolver = MagicMock()
+    fake_resolver.close = AsyncMock()
+    fake_ip_route = MagicMock()
+    fake_ip_route.close.side_effect = OSError("already closed")
+
+    import pyroute2.iproute as pyroute2_iproute
+
+    with (
+        patch("aiodiscover.discovery.DNSResolver", return_value=fake_resolver),
+        patch.object(pyroute2_iproute, "IPRoute", return_value=fake_ip_route),
+        patch(
+            "aiodiscover.network.SystemNetworkData.setup",
+            side_effect=RuntimeError("no local ip"),
+        ),
+    ):
+        async with discovery.DiscoverHosts() as discover_hosts:
+            with pytest.raises(RuntimeError, match="no local ip"):
+                discover_hosts._setup_sys_network_data()
+
+    fake_ip_route.close.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_resolv_conf_reload_closes_old_ip_route() -> None:
+    """When resolv.conf changes, the previous IPRoute socket is closed before reloading."""
+    fake_ip_route_1 = MagicMock()
+    fake_ip_route_2 = MagicMock()
+
+    net_data_1 = SystemNetworkData(None, None)
+    net_data_1.ip_route = fake_ip_route_1
+    net_data_1.router_ip = IPv4Address("192.168.0.1")
+    net_data_1.network = IPv4Network("192.168.0.0/24")
+    net_data_1.nameservers = [IPv4Address("192.168.0.254")]
+
+    net_data_2 = SystemNetworkData(None, None)
+    net_data_2.ip_route = fake_ip_route_2
+    net_data_2.router_ip = IPv4Address("192.168.0.1")
+    net_data_2.network = IPv4Network("192.168.0.0/24")
+    net_data_2.nameservers = [IPv4Address("192.168.0.99")]
+
+    setup_results = [net_data_1, net_data_2]
+
+    def fake_setup() -> SystemNetworkData:
+        return setup_results.pop(0)
+
+    signature_calls = iter([(1, 100), (2, 100)])
+
+    def fake_sig() -> tuple[int, int]:
+        return next(signature_calls)
+
+    subnet_size = len(list(net_data_1.network.hosts()))
+
+    fake_resolver = MagicMock()
+    fake_resolver.close = AsyncMock()
+    with patch("aiodiscover.discovery.DNSResolver", return_value=fake_resolver):
+        discover_hosts = discovery.DiscoverHosts()
+
+    with (
+        patch.object(discover_hosts, "_setup_sys_network_data", fake_setup),
+        patch("aiodiscover.discovery.resolv_conf_signature", fake_sig),
+        patch.object(discovery, "MAX_ADDRESSES", 1024),
+        patch(
+            "aiodiscover.network.SystemNetworkData.async_get_neighbours",
+            return_value={},
+        ),
+        patch(
+            "aiodiscover.discovery.async_query_for_ptrs",
+            return_value=[None] * subnet_size,
+        ),
+    ):
+        await discover_hosts.async_discover()
+        assert discover_hosts._sys_network_data is net_data_1
+        fake_ip_route_1.close.assert_not_called()
+
+        await discover_hosts.async_discover()
+        assert discover_hosts._sys_network_data is net_data_2
+
+    fake_ip_route_1.close.assert_called_once()
+    fake_ip_route_2.close.assert_not_called()
+
+    await discover_hosts.close()
+    fake_ip_route_2.close.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_resolv_conf_reload_tolerates_old_ip_route_close_error() -> None:
+    """An OSError from the discarded IPRoute.close() does not break the reload."""
+    fake_ip_route_1 = MagicMock()
+    fake_ip_route_1.close.side_effect = OSError("already closed")
+    fake_ip_route_2 = MagicMock()
+
+    net_data_1 = SystemNetworkData(None, None)
+    net_data_1.ip_route = fake_ip_route_1
+    net_data_1.router_ip = IPv4Address("192.168.0.1")
+    net_data_1.network = IPv4Network("192.168.0.0/24")
+    net_data_1.nameservers = [IPv4Address("192.168.0.254")]
+
+    net_data_2 = SystemNetworkData(None, None)
+    net_data_2.ip_route = fake_ip_route_2
+    net_data_2.router_ip = IPv4Address("192.168.0.1")
+    net_data_2.network = IPv4Network("192.168.0.0/24")
+    net_data_2.nameservers = [IPv4Address("192.168.0.99")]
+
+    setup_results = [net_data_1, net_data_2]
+
+    def fake_setup() -> SystemNetworkData:
+        return setup_results.pop(0)
+
+    signature_calls = iter([(1, 100), (2, 100)])
+
+    def fake_sig() -> tuple[int, int]:
+        return next(signature_calls)
+
+    subnet_size = len(list(net_data_1.network.hosts()))
+
+    fake_resolver = MagicMock()
+    fake_resolver.close = AsyncMock()
+    with patch("aiodiscover.discovery.DNSResolver", return_value=fake_resolver):
+        discover_hosts = discovery.DiscoverHosts()
+
+    with (
+        patch.object(discover_hosts, "_setup_sys_network_data", fake_setup),
+        patch("aiodiscover.discovery.resolv_conf_signature", fake_sig),
+        patch.object(discovery, "MAX_ADDRESSES", 1024),
+        patch(
+            "aiodiscover.network.SystemNetworkData.async_get_neighbours",
+            return_value={},
+        ),
+        patch(
+            "aiodiscover.discovery.async_query_for_ptrs",
+            return_value=[None] * subnet_size,
+        ),
+    ):
+        await discover_hosts.async_discover()
+        await discover_hosts.async_discover()
+
+    assert discover_hosts._sys_network_data is net_data_2
+    fake_ip_route_1.close.assert_called_once()
+
+    await discover_hosts.close()

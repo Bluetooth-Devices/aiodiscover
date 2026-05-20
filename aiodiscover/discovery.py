@@ -170,12 +170,17 @@ class DiscoverHosts:
         try:
             await self._resolver.close()
         finally:
-            if self._sys_network_data is not None:
-                ip_route = self._sys_network_data.ip_route
-                if ip_route is not None:
-                    with suppress(OSError):
-                        ip_route.close()
-                self._sys_network_data = None
+            self._release_sys_network_data()
+
+    def _release_sys_network_data(self) -> None:
+        """Close the pyroute2 IPRoute socket and drop the cached network data."""
+        if self._sys_network_data is None:
+            return
+        ip_route = self._sys_network_data.ip_route
+        if ip_route is not None:
+            with suppress(OSError):
+                ip_route.close()
+        self._sys_network_data = None
 
     def _setup_sys_network_data(self) -> SystemNetworkData:
         ip_route: IPRoute | None = None
@@ -184,7 +189,17 @@ class DiscoverHosts:
 
             ip_route = IPRoute()
         sys_network_data = SystemNetworkData(ip_route)
-        sys_network_data.setup()
+        try:
+            sys_network_data.setup()
+        except BaseException:
+            # setup() may raise on Linux when resolv.conf is missing or when
+            # no usable local IP can be found. The IPRoute netlink socket
+            # opened just above would otherwise leak until GC — close it
+            # here so the failure is clean.
+            if ip_route is not None:
+                with suppress(OSError):
+                    ip_route.close()
+            raise
         return sys_network_data
 
     def _cleanup_cache(self) -> None:
@@ -216,7 +231,7 @@ class DiscoverHosts:
                 "resolv.conf changed; reloading network data and "
                 "clearing failed nameservers cache",
             )
-            self._sys_network_data = None
+            self._release_sys_network_data()
             self._failed_nameservers.clear()
 
         if not self._sys_network_data:
