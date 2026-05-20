@@ -940,6 +940,10 @@ async def test_async_discover_after_close_raises() -> None:
         await discover_hosts.async_discover()
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="pyroute2.iproute imports fcntl, which is not available on Windows",
+)
 @pytest.mark.asyncio
 async def test_iproute_calls_pinned_to_single_thread() -> None:
     """Pin IPRoute construction, get_neighbours, and close to one OS thread."""
