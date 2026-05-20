@@ -304,11 +304,13 @@ class SystemNetworkData:
         try:
             async with asyncio_timeout(ARP_TIMEOUT):
                 out_data, _ = await arp.communicate()
-        except asyncio.TimeoutError:
+        except (asyncio.TimeoutError, asyncio.CancelledError) as exc:
             with suppress(ProcessLookupError):
                 arp.kill()
             with suppress(OSError):
                 await arp.wait()
+            if isinstance(exc, asyncio.CancelledError):
+                raise
             return neighbours
 
         for line in out_data.decode().splitlines():
