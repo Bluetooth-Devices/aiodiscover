@@ -302,14 +302,22 @@ class SystemNetworkData:
         except OSError:
             return neighbours
         try:
-            async with asyncio_timeout(ARP_TIMEOUT):
-                out_data, _ = await arp.communicate()
-        except asyncio.TimeoutError:
-            with suppress(ProcessLookupError):
-                arp.kill()
-            with suppress(OSError):
-                await arp.wait()
-            return neighbours
+            try:
+                async with asyncio_timeout(ARP_TIMEOUT):
+                    out_data, _ = await arp.communicate()
+            except asyncio.TimeoutError:
+                return neighbours
+        finally:
+            # Reap on every exit where the process is still alive: timeout,
+            # caller cancellation (HA shutdown/reload), or any unexpected
+            # exception. Skipping this path was the source of the same
+            # subprocess-leak pattern fixed in #229; cancellation took the
+            # same path but never hit the timeout branch.
+            if arp.returncode is None:
+                with suppress(ProcessLookupError):
+                    arp.kill()
+                with suppress(OSError):
+                    await arp.wait()
 
         for line in out_data.decode().splitlines():
             chomped = line.strip()
