@@ -350,7 +350,7 @@ async def _reap_subprocess(proc: asyncio.subprocess.Process) -> None:
         return
     with suppress(ProcessLookupError):
         proc.kill()
-    waiter = asyncio.ensure_future(proc.wait())
+    waiter = asyncio.create_task(proc.wait())
     try:
         await asyncio.shield(waiter)
     except asyncio.CancelledError:
