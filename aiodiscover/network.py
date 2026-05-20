@@ -45,6 +45,13 @@ LOOPBACK_TARGET_IP = "127.0.0.1"
 
 IGNORE_MACS = {"00:00:00:00:00:00", "ff:ff:ff:ff:ff:ff"}
 
+# pyroute2 reports neighbour attributes under different names depending on
+# the platform stub: Linux netlink uses NDA_*, the macOS stub added in
+# pyroute2 0.9.2 uses NEIGH_*. Accept both so the netlink path works on
+# either OS without falling all the way through to the arp -an reader.
+NEIGHBOUR_IP_KEYS = frozenset({"NDA_DST", "NEIGH_IP"})
+NEIGHBOUR_LLADDR_KEYS = frozenset({"NDA_LLADDR", "NEIGH_LLADDR"})
+
 RESOLV_CONF_PATH = "/etc/resolv.conf"
 
 
@@ -322,9 +329,9 @@ class SystemNetworkData:
             ip = None
             mac = None
             for key, value in neighbour["attrs"]:
-                if key == "NDA_DST":
+                if key in NEIGHBOUR_IP_KEYS:
                     ip = value
-                elif key == "NDA_LLADDR":
+                elif key in NEIGHBOUR_LLADDR_KEYS:
                     mac = value
             if ip and mac:
                 _fill_neighbor(neighbours, ip, mac)

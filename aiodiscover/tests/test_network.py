@@ -320,6 +320,45 @@ def test_async_populate_arp_swallows_send_errors() -> None:
 
 
 @pytest.mark.asyncio
+async def test_async_get_neighbours_ip_route_parses_linux_keys() -> None:
+    """Linux netlink NDA_DST / NDA_LLADDR attrs feed the neighbour map."""
+    ip_route = MagicMock()
+    ip_route.get_neighbours = MagicMock(
+        return_value=[
+            {
+                "attrs": [
+                    ("NDA_DST", "192.168.1.5"),
+                    ("NDA_LLADDR", "aa:bb:cc:dd:ee:ff"),
+                ],
+            },
+        ],
+    )
+    net_data = SystemNetworkData(ip_route)
+    result = await net_data._async_get_neighbours_ip_route()
+    assert result == {"192.168.1.5": "aa:bb:cc:dd:ee:ff"}
+
+
+@pytest.mark.asyncio
+async def test_async_get_neighbours_ip_route_parses_darwin_keys() -> None:
+    """pyroute2's macOS stub uses NEIGH_IP / NEIGH_LLADDR; both names parse."""
+    ip_route = MagicMock()
+    ip_route.get_neighbours = MagicMock(
+        return_value=[
+            {
+                "attrs": [
+                    ("NEIGH_IP", "192.168.1.6"),
+                    ("NEIGH_LLADDR", "11:22:33:44:55:66"),
+                    ("NEIGH_IFNAME", "en0"),
+                ],
+            },
+        ],
+    )
+    net_data = SystemNetworkData(ip_route)
+    result = await net_data._async_get_neighbours_ip_route()
+    assert result == {"192.168.1.6": "11:22:33:44:55:66"}
+
+
+@pytest.mark.asyncio
 async def test_async_get_neighbours_arp_parses_output() -> None:
     """The `arp -a -n` parser pulls ip + mac from each line."""
     arp_output = (
