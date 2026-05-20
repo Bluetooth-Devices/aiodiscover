@@ -981,34 +981,36 @@ async def test_iproute_calls_pinned_to_single_thread() -> None:
         construction_thread.append(threading.get_ident())
         return fake_ip_route
 
+    def fake_setup(self: SystemNetworkData) -> None:
+        # Stub the OS-touching parts of setup() — load no resolv.conf, no
+        # ifaddr — and populate the minimum fields async_get_neighbours needs.
+        self.network = IPv4Network("192.168.0.0/30")
+        self.nameservers = []
+
     with (
         patch("aiodiscover.discovery.DNSResolver", return_value=fake_resolver),
         patch.object(pyroute2_iproute, "IPRoute", side_effect=fake_iproute_ctor),
+        patch.object(SystemNetworkData, "setup", fake_setup),
     ):
         discover_hosts = discovery.DiscoverHosts()
 
-    from aiodiscover.network import SystemNetworkData
+        # Drive _setup_sys_network_data through the pinned executor so the
+        # real IPRoute() constructor (here patched) actually fires on the
+        # worker thread — the whole point of the pinning.
+        sys_network_data = await asyncio.get_running_loop().run_in_executor(
+            discover_hosts._iproute_executor,
+            discover_hosts._setup_sys_network_data,
+        )
+        discover_hosts._sys_network_data = sys_network_data
 
-    fake_net_data = SystemNetworkData(
-        fake_ip_route, iproute_executor=discover_hosts._iproute_executor
-    )
-    fake_net_data.network = IPv4Network("192.168.0.0/30")
-    fake_net_data.nameservers = []
-    discover_hosts._sys_network_data = fake_net_data
+        await sys_network_data.async_get_neighbours(["192.168.0.1"])
+        await discover_hosts.close()
 
-    # Force the executor to actually spawn its single worker thread by
-    # running a sentinel task and recording where it lands.
-    await asyncio.get_running_loop().run_in_executor(
-        discover_hosts._iproute_executor, fake_ip_route.get_neighbours
-    )
-    await fake_net_data.async_get_neighbours(["192.168.0.1"])
-
-    await discover_hosts.close()
-
-    assert len(get_neighbours_thread) >= 2
+    assert len(construction_thread) == 1
+    assert len(get_neighbours_thread) == 1
     assert len(close_thread) == 1
-    assert get_neighbours_thread[0] == get_neighbours_thread[-1]
-    assert get_neighbours_thread[0] == close_thread[0]
+    assert construction_thread[0] == get_neighbours_thread[0]
+    assert construction_thread[0] == close_thread[0]
     # And not the main asyncio loop thread.
     assert close_thread[0] != threading.get_ident()
 
