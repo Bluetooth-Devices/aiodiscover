@@ -137,10 +137,13 @@ class DiscoverHosts:
         self._closed = False
 
         # Create resolver with optional no_recurse flag
-        resolver_kwargs = {"timeout": DNS_RESPONSE_TIMEOUT}
         if no_recurse:
-            resolver_kwargs["flags"] = pycares.ARES_FLAG_NORECURSE
-        self._resolver = DNSResolver(**resolver_kwargs)
+            self._resolver = DNSResolver(
+                timeout=DNS_RESPONSE_TIMEOUT,
+                flags=pycares.ARES_FLAG_NORECURSE,
+            )
+        else:
+            self._resolver = DNSResolver(timeout=DNS_RESPONSE_TIMEOUT)
 
     async def __aenter__(self) -> DiscoverHosts:
         return self

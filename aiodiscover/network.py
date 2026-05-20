@@ -101,17 +101,24 @@ def parse_resolv_conf(lines: Iterable[str]) -> list[IPv4Address | IPv6Address]:
     return nameservers
 
 
+def _parse_ipv4(value: str) -> IPv4Address | None:
+    """Parse a string into an IPv4Address, dropping IPv6 / invalid input."""
+    ip_addr = cached_ip_addresses(value)
+    return ip_addr if isinstance(ip_addr, IPv4Address) else None
+
+
 def get_local_ip(target: str = DEFAULT_TARGET) -> IPv4Address | None:
     """Find the local ip address."""
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.setblocking(False)
     try:
         s.connect((target, 1))
-        return cached_ip_addresses(s.getsockname()[0])
+        source = s.getsockname()[0]
     except OSError:
         return None
     finally:
         s.close()
+    return _parse_ipv4(source)
 
 
 def get_network(local_ip: IPv4Address, adapters: list[Adapter]) -> IPv4Network:
@@ -144,9 +151,8 @@ def get_attrs_key(data: Any, key: Any) -> str | None:
 
 def get_router_ip(ipr: IPRoute) -> IPv4Address | None:
     """Obtain the router ip from the default route."""
-    return cached_ip_addresses(
-        get_attrs_key(ipr.get_default_routes()[0], "RTA_GATEWAY"),
-    )
+    gateway = get_attrs_key(ipr.get_default_routes()[0], "RTA_GATEWAY")
+    return _parse_ipv4(gateway) if gateway else None
 
 
 def _get_macos_default_gateway(family: str = "inet") -> str | None:
@@ -218,7 +224,7 @@ class SystemNetworkData:
     def __init__(self, ip_route: IPRoute | None, local_ip: str | None = None) -> None:
         """Init system network data."""
         self.ip_route = ip_route
-        self.local_ip = cached_ip_addresses(local_ip) if local_ip else None
+        self.local_ip = _parse_ipv4(local_ip) if local_ip else None
 
     def setup(self) -> None:
         """Obtain the local network data."""
@@ -255,10 +261,10 @@ class SystemNetworkData:
             # pyroute2 is Linux-only; on macOS parse `route -n get default`
             gateway = _get_macos_default_gateway()
             if gateway:
-                self.router_ip = cached_ip_addresses(gateway)
+                self.router_ip = _parse_ipv4(gateway)
         if not self.router_ip:
             network_address = str(self.network.network_address)
-            self.router_ip = cached_ip_addresses(f"{network_address[:-1]}1")
+            self.router_ip = _parse_ipv4(f"{network_address[:-1]}1")
 
     async def async_get_neighbours(self, ips: Iterable[str]) -> dict[str, str]:
         """Get neighbours with best available method."""
