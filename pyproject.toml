@@ -26,6 +26,9 @@ packages = [
     { include = "aiodiscover" },
 ]
 
+[project.scripts]
+aiodiscover = "aiodiscover.cli:main"
+
 [tool.poetry.dependencies]
 python = ">=3.10,<4.0"
 async_timeout = { version = ">=4.0.1", python = "<3.11" }

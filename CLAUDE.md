@@ -288,12 +288,11 @@ prose in the following:
   bumper if they don't match.
 - **Don't commit the repo-root scratch files** (`out`,
   `fix_ptr_recursion.py`, `no_recurse_default_pr.md`,
-  `test_recursion_flag.py`, `profile_discovery.py`,
-  `demo.py`) as part of an unrelated change. They're
-  in-progress investigation artefacts living outside the
-  package and outside the test suite — leave them where they
-  are unless you're explicitly working on the PTR-recursion
-  effort.
+  `test_recursion_flag.py`, `profile_discovery.py`) as part
+  of an unrelated change. They're in-progress investigation
+  artefacts living outside the package and outside the test
+  suite — leave them where they are unless you're explicitly
+  working on the PTR-recursion effort.
 - **Don't expand the install footprint casually.** This
   library is on the import path of every Home Assistant
   install; new runtime dependencies need to justify their
