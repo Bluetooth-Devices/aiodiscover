@@ -308,16 +308,7 @@ class SystemNetworkData:
             except asyncio.TimeoutError:
                 return neighbours
         finally:
-            # Reap on every exit where the process is still alive: timeout,
-            # caller cancellation (HA shutdown/reload), or any unexpected
-            # exception. Skipping this path was the source of the same
-            # subprocess-leak pattern fixed in #229; cancellation took the
-            # same path but never hit the timeout branch.
-            if arp.returncode is None:
-                with suppress(ProcessLookupError):
-                    arp.kill()
-                with suppress(OSError):
-                    await arp.wait()
+            await _reap_subprocess(arp)
 
         for line in out_data.decode().splitlines():
             chomped = line.strip()
@@ -351,3 +342,12 @@ class SystemNetworkData:
                 _fill_neighbor(neighbours, ip, mac)
 
         return neighbours
+
+
+async def _reap_subprocess(proc: asyncio.subprocess.Process) -> None:
+    """Kill and wait on a subprocess if it has not already exited."""
+    if proc.returncode is None:
+        with suppress(ProcessLookupError):
+            proc.kill()
+        with suppress(OSError):
+            await proc.wait()
