@@ -953,6 +953,10 @@ async def test_async_discover_after_close_raises() -> None:
         await discover_hosts.async_discover()
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="pyroute2.iproute imports fcntl, which is not available on Windows",
+)
 @pytest.mark.asyncio
 async def test_setup_failure_closes_ip_route() -> None:
     """_setup_sys_network_data closes the IPRoute if SystemNetworkData.setup() raises."""
@@ -977,6 +981,10 @@ async def test_setup_failure_closes_ip_route() -> None:
     fake_ip_route.close.assert_called_once()
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="pyroute2.iproute imports fcntl, which is not available on Windows",
+)
 @pytest.mark.asyncio
 async def test_setup_failure_tolerates_close_error() -> None:
     """An OSError from IPRoute.close() during a setup failure does not mask the original error."""
