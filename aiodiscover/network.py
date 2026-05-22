@@ -21,7 +21,7 @@ from .util import asyncio_timeout
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from pyroute2.iproute import IPRoute
+    from pyroute2 import AsyncIPRoute
 # Some MAC addresses will drop the leading zero so
 # our mac validation must allow a single char
 VALID_MAC_ADDRESS = re.compile("^([0-9A-Fa-f]{1,2}[:-]){5}([0-9A-Fa-f]{1,2})$")
@@ -153,9 +153,12 @@ def get_attrs_key(data: Any, key: Any) -> str | None:
     return None
 
 
-def get_router_ip(ipr: IPRoute) -> IPv4Address | None:
+async def async_get_router_ip(ipr: AsyncIPRoute) -> IPv4Address | None:
     """Obtain the router ip from the default route."""
-    gateway = get_attrs_key(ipr.get_default_routes()[0], "RTA_GATEWAY")
+    routes = [route async for route in await ipr.get_default_routes()]
+    if not routes:
+        return None
+    gateway = get_attrs_key(routes[0], "RTA_GATEWAY")
     return _parse_ipv4(gateway) if gateway else None
 
 
@@ -225,12 +228,14 @@ class SystemNetworkData:
     local_ip: IPv4Address | None = None
     resolv_conf_signature: ResolvConfSignature | None = None
 
-    def __init__(self, ip_route: IPRoute | None, local_ip: str | None = None) -> None:
+    def __init__(
+        self, ip_route: AsyncIPRoute | None, local_ip: str | None = None
+    ) -> None:
         """Init system network data."""
         self.ip_route = ip_route
         self.local_ip = _parse_ipv4(local_ip) if local_ip else None
 
-    def setup(self) -> None:
+    async def async_setup(self) -> None:
         """Obtain the local network data."""
         # Default to an empty list so attribute access stays safe when
         # resolv.conf is absent on Windows (the FileNotFoundError below is
@@ -260,7 +265,7 @@ class SystemNetworkData:
         self.network = get_network(self.local_ip, self.adapters)
         if self.ip_route:
             with suppress(Exception):
-                self.router_ip = get_router_ip(self.ip_route)
+                self.router_ip = await async_get_router_ip(self.ip_route)
         if not self.router_ip and sys.platform == "darwin":
             # pyroute2 is Linux-only; on macOS parse `route -n get default`
             gateway = _get_macos_default_gateway()
@@ -337,13 +342,9 @@ class SystemNetworkData:
     async def _async_get_neighbours_ip_route(self) -> dict[str, str]:
         """Get neighbours with pyroute2."""
         neighbours: dict[str, str] = {}
-        loop = asyncio.get_running_loop()
-        # This shouldn't ever block but it does
-        # interact with netlink so its safer to run
-        # in the executor
         if TYPE_CHECKING:
             assert self.ip_route is not None
-        for neighbour in await loop.run_in_executor(None, self.ip_route.get_neighbours):
+        async for neighbour in await self.ip_route.get_neighbours():
             ip = None
             mac = None
             for key, value in neighbour["attrs"]:

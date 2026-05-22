@@ -1,8 +1,10 @@
 import asyncio
 import subprocess
 import sys
+from collections.abc import AsyncIterator
 from ipaddress import IPv4Address, IPv6Address, ip_address
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -99,7 +101,10 @@ def test_resolv_conf_signature_missing_file_returns_none() -> None:
         assert resolv_conf_signature() is None
 
 
-def test_setup_defaults_nameservers_to_empty_on_windows_without_resolv_conf() -> None:
+@pytest.mark.asyncio
+async def test_setup_defaults_nameservers_to_empty_on_windows_without_resolv_conf() -> (
+    None
+):
     """On Windows, a missing resolv.conf leaves nameservers as an empty list."""
     net_data = SystemNetworkData(None, local_ip="192.168.1.10")
     with (
@@ -111,7 +116,7 @@ def test_setup_defaults_nameservers_to_empty_on_windows_without_resolv_conf() ->
         patch("aiodiscover.network.ifaddr.get_adapters", return_value=[]),
     ):
         mock_sys.platform = "win32"
-        net_data.setup()
+        await net_data.async_setup()
     assert net_data.nameservers == []
 
 
@@ -133,7 +138,8 @@ def test_setup_defaults_nameservers_to_empty_on_windows_without_resolv_conf() ->
         ("192.168.1.70", 30, "192.168.1.69"),
     ],
 )
-def test_setup_router_ip_fallback_uses_first_network_host(
+@pytest.mark.asyncio
+async def test_setup_router_ip_fallback_uses_first_network_host(
     local_ip: str, prefix: int, expected_router: str
 ) -> None:
     """Without a routing table, the router falls back to the first host of the network."""
@@ -149,11 +155,12 @@ def test_setup_router_ip_fallback_uses_first_network_host(
         patch("aiodiscover.network.ifaddr.get_adapters", return_value=[adapter]),
     ):
         mock_sys.platform = "win32"
-        net_data.setup()
+        await net_data.async_setup()
     assert net_data.router_ip == IPv4Address(expected_router)
 
 
-def test_setup_propagates_missing_resolv_conf_on_non_windows() -> None:
+@pytest.mark.asyncio
+async def test_setup_propagates_missing_resolv_conf_on_non_windows() -> None:
     """On Linux/macOS, a missing resolv.conf still bubbles up."""
     net_data = SystemNetworkData(None, local_ip="192.168.1.10")
     with (
@@ -165,7 +172,7 @@ def test_setup_propagates_missing_resolv_conf_on_non_windows() -> None:
     ):
         mock_sys.platform = "linux"
         with pytest.raises(FileNotFoundError):
-            net_data.setup()
+            await net_data.async_setup()
 
 
 def test_load_resolv_conf_with_signature_matches_fstat(tmp_path: Path) -> None:
@@ -394,19 +401,26 @@ def test_async_populate_arp_swallows_send_errors() -> None:
     assert sock_instance.sendto.call_count == 2
 
 
+async def _as_async_gen(items: list[Any]) -> AsyncIterator[Any]:
+    for item in items:
+        yield item
+
+
 @pytest.mark.asyncio
 async def test_async_get_neighbours_ip_route_parses_linux_keys() -> None:
     """Linux netlink NDA_DST / NDA_LLADDR attrs feed the neighbour map."""
     ip_route = MagicMock()
-    ip_route.get_neighbours = MagicMock(
-        return_value=[
-            {
-                "attrs": [
-                    ("NDA_DST", "192.168.1.5"),
-                    ("NDA_LLADDR", "aa:bb:cc:dd:ee:ff"),
-                ],
-            },
-        ],
+    ip_route.get_neighbours = AsyncMock(
+        return_value=_as_async_gen(
+            [
+                {
+                    "attrs": [
+                        ("NDA_DST", "192.168.1.5"),
+                        ("NDA_LLADDR", "aa:bb:cc:dd:ee:ff"),
+                    ],
+                },
+            ]
+        ),
     )
     net_data = SystemNetworkData(ip_route)
     result = await net_data._async_get_neighbours_ip_route()
@@ -417,16 +431,18 @@ async def test_async_get_neighbours_ip_route_parses_linux_keys() -> None:
 async def test_async_get_neighbours_ip_route_parses_darwin_keys() -> None:
     """pyroute2's macOS stub uses NEIGH_IP / NEIGH_LLADDR; both names parse."""
     ip_route = MagicMock()
-    ip_route.get_neighbours = MagicMock(
-        return_value=[
-            {
-                "attrs": [
-                    ("NEIGH_IP", "192.168.1.6"),
-                    ("NEIGH_LLADDR", "11:22:33:44:55:66"),
-                    ("NEIGH_IFNAME", "en0"),
-                ],
-            },
-        ],
+    ip_route.get_neighbours = AsyncMock(
+        return_value=_as_async_gen(
+            [
+                {
+                    "attrs": [
+                        ("NEIGH_IP", "192.168.1.6"),
+                        ("NEIGH_LLADDR", "11:22:33:44:55:66"),
+                        ("NEIGH_IFNAME", "en0"),
+                    ],
+                },
+            ]
+        ),
     )
     net_data = SystemNetworkData(ip_route)
     result = await net_data._async_get_neighbours_ip_route()
@@ -673,16 +689,22 @@ async def test_async_get_neighbours_closes_arp_socket_on_cancel() -> None:
 async def test_async_get_neighbours_ip_route_parses_attrs() -> None:
     """The pyroute2 path extracts NDA_DST + NDA_LLADDR per neighbour."""
     ip_route = MagicMock()
-    ip_route.get_neighbours.return_value = [
-        {
-            "attrs": [
-                ("NDA_DST", "192.168.1.5"),
-                ("NDA_LLADDR", "aa:bb:cc:dd:ee:ff"),
-            ],
-        },
-        {"attrs": [("NDA_DST", "192.168.1.6")]},  # missing mac → dropped
-        {"attrs": [("NDA_LLADDR", "11:22:33:44:55:66")]},  # missing ip → dropped
-    ]
+    ip_route.get_neighbours = AsyncMock(
+        return_value=_as_async_gen(
+            [
+                {
+                    "attrs": [
+                        ("NDA_DST", "192.168.1.5"),
+                        ("NDA_LLADDR", "aa:bb:cc:dd:ee:ff"),
+                    ],
+                },
+                {"attrs": [("NDA_DST", "192.168.1.6")]},  # missing mac → dropped
+                {
+                    "attrs": [("NDA_LLADDR", "11:22:33:44:55:66")]
+                },  # missing ip → dropped
+            ]
+        )
+    )
     net_data = SystemNetworkData(ip_route)
     result = await net_data._async_get_neighbours_ip_route()
     assert result == {"192.168.1.5": "aa:bb:cc:dd:ee:ff"}

@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from ipaddress import IPv4Address, IPv6Address
     from types import TracebackType
 
-    from pyroute2.iproute import IPRoute
+    from pyroute2 import AsyncIPRoute
 
     from .network import ResolvConfSignature
 
@@ -202,20 +202,20 @@ class DiscoverHosts:
                 ip_route.close()
         self._sys_network_data = None
 
-    def _setup_sys_network_data(self) -> SystemNetworkData:
-        ip_route: IPRoute | None = None
+    async def _setup_sys_network_data(self) -> SystemNetworkData:
+        ip_route: AsyncIPRoute | None = None
         with suppress(Exception):
-            from pyroute2.iproute import IPRoute  # noqa: PLC0415
+            from pyroute2 import AsyncIPRoute  # noqa: PLC0415
 
-            ip_route = IPRoute()
+            ip_route = AsyncIPRoute()
         sys_network_data = SystemNetworkData(ip_route)
         try:
-            sys_network_data.setup()
+            await sys_network_data.async_setup()
         except BaseException:
-            # setup() may raise on Linux when resolv.conf is missing or when
-            # no usable local IP can be found. The IPRoute netlink socket
-            # opened just above would otherwise leak until GC — close it
-            # here so the failure is clean.
+            # async_setup() may raise on Linux when resolv.conf is missing or
+            # when no usable local IP can be found. AsyncIPRoute opens a
+            # netlink socket eagerly — close it here so the failure path
+            # doesn't leak it until GC.
             if ip_route is not None:
                 with suppress(OSError):
                     ip_route.close()
@@ -256,10 +256,7 @@ class DiscoverHosts:
             self._failed_nameservers.clear()
 
         if not self._sys_network_data:
-            self._sys_network_data = await self._loop.run_in_executor(
-                None,
-                self._setup_sys_network_data,
-            )
+            self._sys_network_data = await self._setup_sys_network_data()
             # Cache the in-fd signature — the upfront stat can disagree if
             # a symlink target was swapped in between. Fall back to the
             # upfront stat when setup didn't populate one.
