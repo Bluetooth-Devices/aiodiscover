@@ -99,6 +99,44 @@ def test_setup_defaults_nameservers_to_empty_on_windows_without_resolv_conf() ->
     assert net_data.nameservers == []
 
 
+@pytest.mark.parametrize(
+    ("local_ip", "prefix", "expected_router"),
+    [
+        # /24 — fallback unchanged, .0 + 1.
+        ("192.168.1.50", 24, "192.168.1.1"),
+        # Larger-than-/24 prefixes still resolve to .0.0.1-style address.
+        ("192.168.5.50", 16, "192.168.0.1"),
+        # /25 networks above .0: previous heuristic produced .121 here.
+        ("192.168.1.150", 25, "192.168.1.129"),
+        # /26 quarter networks.
+        ("192.168.1.70", 26, "192.168.1.65"),
+        ("192.168.1.150", 26, "192.168.1.129"),
+        # /28 sixteen-host networks.
+        ("192.168.1.50", 28, "192.168.1.49"),
+        # /30 point-to-point — first host is network_address + 1.
+        ("192.168.1.70", 30, "192.168.1.69"),
+    ],
+)
+def test_setup_router_ip_fallback_uses_first_network_host(
+    local_ip: str, prefix: int, expected_router: str
+) -> None:
+    """Without a routing table, the router falls back to the first host of the network."""
+    adapter = MagicMock()
+    adapter.ips = [MagicMock(ip=local_ip, network_prefix=prefix)]
+    net_data = SystemNetworkData(None, local_ip=local_ip)
+    with (
+        patch(
+            "aiodiscover.network.load_resolv_conf_with_signature",
+            side_effect=FileNotFoundError,
+        ),
+        patch("aiodiscover.network.sys") as mock_sys,
+        patch("aiodiscover.network.ifaddr.get_adapters", return_value=[adapter]),
+    ):
+        mock_sys.platform = "win32"
+        net_data.setup()
+    assert net_data.router_ip == IPv4Address(expected_router)
+
+
 def test_setup_propagates_missing_resolv_conf_on_non_windows() -> None:
     """On Linux/macOS, a missing resolv.conf still bubbles up."""
     net_data = SystemNetworkData(None, local_ip="192.168.1.10")

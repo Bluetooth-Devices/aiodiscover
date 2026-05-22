@@ -263,8 +263,14 @@ class SystemNetworkData:
             if gateway:
                 self.router_ip = _parse_ipv4(gateway)
         if not self.router_ip:
-            network_address = str(self.network.network_address)
-            self.router_ip = _parse_ipv4(f"{network_address[:-1]}1")
+            # First usable host in the network — `network_address + 1` for
+            # any IPv4 prefix /30 or shorter, matching the conventional
+            # router placement. The previous string-slice heuristic
+            # (`network_address[:-1] + "1"`) only happens to produce the
+            # right address when the network address ends in `0`, so it
+            # silently mis-pointed the fallback for /25, /26, /27, /28,
+            # /29, /30 networks whose base is `.64`/`.128`/`.192`/etc.
+            self.router_ip = next(self.network.hosts(), None)
 
     async def async_get_neighbours(self, ips: Iterable[str]) -> dict[str, str]:
         """Get neighbours with best available method."""
