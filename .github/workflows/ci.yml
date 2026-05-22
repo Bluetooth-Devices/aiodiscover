@@ -13,6 +13,7 @@ concurrency:
 env:
   POETRY_VIRTUALENVS_IN_PROJECT: "true"
   UV_PYTHON_PREFERENCE: only-managed
+  UV_VERSION: "0.11.16"
 
 jobs:
   lint:
@@ -62,28 +63,27 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v8.1.0
+      - name: Set up uv and Python ${{ matrix.python-version }}
+        id: python
+        uses: ./.github/actions/setup-uv-python
         with:
-          enable-cache: true
+          uv-version: ${{ env.UV_VERSION }}
+          python-version: ${{ matrix.python-version }}
       - name: Install poetry
         run: uv tool install poetry
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        id: setup-python
-        with:
-          python-version: ${{ matrix.python-version }}
-          allow-prereleases: true
-          cache: poetry
+        shell: bash
       - name: Cache poetry venv
         id: cache-venv
         uses: actions/cache@v5
         with:
           path: .venv
-          key: venv-v1-${{ runner.os }}-py${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('poetry.lock', 'pyproject.toml') }}
+          key: venv-v2-${{ runner.os }}-py${{ steps.python.outputs.python-version }}-${{ hashFiles('poetry.lock', 'pyproject.toml') }}
       - name: Install Dependencies
         if: steps.cache-venv.outputs.cache-hit != 'true'
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
         run: |
+          poetry env use "$(uv python find "${PYTHON_VERSION}")"
           poetry install --only=main,dev
         shell: bash
       - name: Test with Pytest
