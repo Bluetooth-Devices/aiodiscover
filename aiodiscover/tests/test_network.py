@@ -63,7 +63,7 @@ def test_parse_resolv_conf_skips_malformed_lines() -> None:
 
 
 def test_parse_resolv_conf_skips_non_nameserver_directives_and_duplicates() -> None:
-    """Non-nameserver keys, duplicate IPs, and unparseable IPs are silently dropped."""
+    """Non-nameserver keys, duplicate IPs, and unparsable IPs are silently dropped."""
     resolv_conf = parse_resolv_conf(
         [
             "domain example.com",
