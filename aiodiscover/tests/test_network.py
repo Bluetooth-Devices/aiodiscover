@@ -14,6 +14,8 @@ from aiodiscover.network import (
     _fill_neighbor,
     _get_macos_default_gateway,
     async_populate_arp,
+    get_attrs_key,
+    get_local_ip,
     load_resolv_conf_with_signature,
     parse_resolv_conf,
     resolv_conf_signature,
@@ -58,6 +60,21 @@ def test_parse_resolv_conf_skips_malformed_lines() -> None:
         IPv4Address("1.1.1.1"),
         IPv4Address("8.8.8.8"),
     ]
+
+
+def test_parse_resolv_conf_skips_non_nameserver_directives_and_duplicates() -> None:
+    """Non-nameserver keys, duplicate IPs, and unparsable IPs are silently dropped."""
+    resolv_conf = parse_resolv_conf(
+        [
+            "domain example.com",
+            "search example.com lan",
+            "options edns0 ndots:1",
+            "nameserver 1.1.1.1",
+            "nameserver 1.1.1.1",
+            "nameserver not-an-ip",
+        ],
+    )
+    assert resolv_conf == [IPv4Address("1.1.1.1")]
 
 
 def test_resolv_conf_signature_returns_stat_tuple(tmp_path: Path) -> None:
@@ -284,6 +301,27 @@ def test_get_macos_default_gateway_default_family_is_inet() -> None:
     args = mock_run.call_args[0][0]
     assert "-inet" in args
     assert "-inet6" not in args
+
+
+def test_get_local_ip_returns_none_when_connect_fails() -> None:
+    """When the UDP probe socket can't connect to the target, return None."""
+    mock_sock = MagicMock()
+    mock_sock.connect.side_effect = OSError("Network is unreachable")
+    with patch("aiodiscover.network.socket.socket", return_value=mock_sock):
+        assert get_local_ip("10.255.255.255") is None
+    mock_sock.close.assert_called_once()
+
+
+def test_get_attrs_key_returns_value_when_present() -> None:
+    """pyroute2-shaped attrs dict yields the matching value."""
+    data = {"attrs": [("RTA_GATEWAY", "192.168.1.1"), ("RTA_OIF", 2)]}
+    assert get_attrs_key(data, "RTA_GATEWAY") == "192.168.1.1"
+
+
+def test_get_attrs_key_returns_none_when_missing() -> None:
+    """A missing key in the attrs list yields None rather than raising."""
+    data = {"attrs": [("RTA_OIF", 2)]}
+    assert get_attrs_key(data, "RTA_GATEWAY") is None
 
 
 def test_fill_neighbor_accepts_valid_entry() -> None:
