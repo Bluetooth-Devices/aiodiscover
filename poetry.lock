@@ -197,84 +197,14 @@ forbiddenfruit = {version = ">=0.1.4", markers = "implementation_name == \"cpyth
 
 [[package]]
 name = "cached-ipaddress"
-version = "1.0.1"
+version = "1.1.1"
 description = "Cache construction of ipaddress objects"
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "cached_ipaddress-1.0.1-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:6d4463e669c9d3b726b1b48927e67958c101e07d1608edc57234ff008ee53e51"},
-    {file = "cached_ipaddress-1.0.1-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:bfccdc8e04bbe499f7a01031a67cafebf55f8af129bdbf659b4970575c284b17"},
-    {file = "cached_ipaddress-1.0.1-cp310-cp310-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:b7aac53ac593d405c9e0bc6815b30f8b5bae35a2f893557ba801219bd64cdea9"},
-    {file = "cached_ipaddress-1.0.1-cp310-cp310-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:3cb994e40ba31f2f981267291988cced9b94e0fcb7b0d14b417cd943f91d0685"},
-    {file = "cached_ipaddress-1.0.1-cp310-cp310-manylinux2014_armv7l.manylinux_2_17_armv7l.manylinux_2_31_armv7l.whl", hash = "sha256:66b9297671185999c4ad140b2ca0f175a4240cede32db52c9087ac36a4c10e04"},
-    {file = "cached_ipaddress-1.0.1-cp310-cp310-musllinux_1_2_aarch64.whl", hash = "sha256:0b0076b2c02343da1001bb67597307fa514254bb9f0eb43dec70f49be797f9f2"},
-    {file = "cached_ipaddress-1.0.1-cp310-cp310-musllinux_1_2_armv7l.whl", hash = "sha256:ad40a8b454a1497902d5b6114f335684abd20d1fb8e548efe23b06f925dc5638"},
-    {file = "cached_ipaddress-1.0.1-cp310-cp310-musllinux_1_2_x86_64.whl", hash = "sha256:c760531ddcd7df117167bec3c69e570ba1d7313ae90b20adba33d415d1943820"},
-    {file = "cached_ipaddress-1.0.1-cp310-cp310-win32.whl", hash = "sha256:2a27440222474d86212bf68f361945c0370146b152bc591b4020280b225b0871"},
-    {file = "cached_ipaddress-1.0.1-cp310-cp310-win_amd64.whl", hash = "sha256:8d176c1add5357b82d083d25ffa4c6c82e2f0414690c1aedecea75a056df303e"},
-    {file = "cached_ipaddress-1.0.1-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:5ed078386f1ba67ae3bed2a8acffe268e0f4d081a77153fc861f6b050f5d2373"},
-    {file = "cached_ipaddress-1.0.1-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:8eca7de22c788474dc43276c3d07d4fc015ccd0baedba824646303e90d5799de"},
-    {file = "cached_ipaddress-1.0.1-cp311-cp311-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:97fd1ef9c9af59d592ac4cfe089738c81c7e5c114af1ba7b7e2c5f2e67e8add8"},
-    {file = "cached_ipaddress-1.0.1-cp311-cp311-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:9c6efe927b287d677c043fe1eeee25dbeeebfa4bec4dd08fa768f03c9b529b7d"},
-    {file = "cached_ipaddress-1.0.1-cp311-cp311-manylinux2014_armv7l.manylinux_2_17_armv7l.manylinux_2_31_armv7l.whl", hash = "sha256:f2f80e578bdd3eb1d0a0902ad4509f56dcf2eb2c212b9f921b05f909ba74c41e"},
-    {file = "cached_ipaddress-1.0.1-cp311-cp311-musllinux_1_2_aarch64.whl", hash = "sha256:e01f26c63aa20a88e9b9827c727fcb408a1b1de4028b4d5d999b8f15c018ce9b"},
-    {file = "cached_ipaddress-1.0.1-cp311-cp311-musllinux_1_2_armv7l.whl", hash = "sha256:6ac82d2fe33c54b70c5bd5408fc177ecb30e68301991546a9dcfdae9afb30ad2"},
-    {file = "cached_ipaddress-1.0.1-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:133b62ab5551fa392439d8b83f98c339bfb91a291522a63b154491cee7515e0d"},
-    {file = "cached_ipaddress-1.0.1-cp311-cp311-win32.whl", hash = "sha256:60a33781ccb5f9a95971f42e78eb36652ca19bff99c97418a627790812399888"},
-    {file = "cached_ipaddress-1.0.1-cp311-cp311-win_amd64.whl", hash = "sha256:cb90719248132bca63b51d220dc1aae801efde54f245647d4736b31a5c02e1e9"},
-    {file = "cached_ipaddress-1.0.1-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:f40f7c9fb855d6989f219c4ea36840d08ee899e2bbb782d7b37581f04f9f62c7"},
-    {file = "cached_ipaddress-1.0.1-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:dcc7fc8df966bfd7bf49e7fe37832c89393c95b46a03a6382ccf3c8518c726b2"},
-    {file = "cached_ipaddress-1.0.1-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:2049b6c52474937ed36349bf9cffff6445703a92a02e504d01f05fa61c78d8ac"},
-    {file = "cached_ipaddress-1.0.1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:c5e46f08cdc369ac68310da85ff2c3d6080b6de8dd054d731bdfe7dc361e5c81"},
-    {file = "cached_ipaddress-1.0.1-cp312-cp312-manylinux2014_armv7l.manylinux_2_17_armv7l.manylinux_2_31_armv7l.whl", hash = "sha256:37bc1c4367b556ca0e1526b50cc1a53cb56c0153052322df30d38df1f2ebd39c"},
-    {file = "cached_ipaddress-1.0.1-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:a9fa1db645f955972d52b0c55876d32b81dbc6b1650822590886e8d96027b689"},
-    {file = "cached_ipaddress-1.0.1-cp312-cp312-musllinux_1_2_armv7l.whl", hash = "sha256:16e4abd669d73e8fc162d95b5978447c3dc2ce60a202c3c4d9c816efe39ef436"},
-    {file = "cached_ipaddress-1.0.1-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:71beeaf5678919976ebc65bedd35866ca05cfd26fb08e5b96e63199cdae88d3f"},
-    {file = "cached_ipaddress-1.0.1-cp312-cp312-win32.whl", hash = "sha256:7ccc61e74e6260a553dfe24370aeecc474c1e959172ac75b1305174d6238653e"},
-    {file = "cached_ipaddress-1.0.1-cp312-cp312-win_amd64.whl", hash = "sha256:ef469a593e365504ddff2d61d83cb9bb77406b1b7eb01b025300d58ce5241112"},
-    {file = "cached_ipaddress-1.0.1-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:f3519cc0ef86b41f8cc2fabe651906bed0614a6ced91b5a552e8cec03cf199f8"},
-    {file = "cached_ipaddress-1.0.1-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:50e08b3fd50404b286c06e82c1c3270332b7560219ad6e25e21769f3974a23f6"},
-    {file = "cached_ipaddress-1.0.1-cp313-cp313-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:9b9e08ec7371dfe6e509839753d999951186cb6d3820e307c3dfe42f37207d1d"},
-    {file = "cached_ipaddress-1.0.1-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:dd3ef73e665aaacc0db3cfc69c7f91d93f66d0f333cc270e42b79e7b74bdbc7b"},
-    {file = "cached_ipaddress-1.0.1-cp313-cp313-manylinux2014_armv7l.manylinux_2_17_armv7l.manylinux_2_31_armv7l.whl", hash = "sha256:da0b06fe686ac37418322c6594a08a60b5d8bd62c5eb2561c74a6397bc5ed3b6"},
-    {file = "cached_ipaddress-1.0.1-cp313-cp313-manylinux_2_36_x86_64.whl", hash = "sha256:82f7f6ed6fd9f682e8fd48e05527f7b22583ac580fb1f28a2f84a55f80481f3c"},
-    {file = "cached_ipaddress-1.0.1-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:818c55c019ee83136832c9e1397f72e392f8c3444cd246985d9aefac8cf0fdbc"},
-    {file = "cached_ipaddress-1.0.1-cp313-cp313-musllinux_1_2_armv7l.whl", hash = "sha256:ad861737a91351079051948c0d783878fd5ca9cf389574e28f67242e7b3ed994"},
-    {file = "cached_ipaddress-1.0.1-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:3319d8bd387e0b747c33f541544b02ef354fc5c8b50e563bc86412563e17d0a0"},
-    {file = "cached_ipaddress-1.0.1-cp313-cp313-win32.whl", hash = "sha256:23d993764169f1e532c5f827d70e05a16ec97fcd1f5c10008eb9292ca474149b"},
-    {file = "cached_ipaddress-1.0.1-cp313-cp313-win_amd64.whl", hash = "sha256:723bf5500ea61914b19b8a63d8e2bb4f8da0295378d976e8df9b7f94be87d440"},
-    {file = "cached_ipaddress-1.0.1-cp314-cp314-macosx_10_13_x86_64.whl", hash = "sha256:ee132b59b6b91fbdb0408b4bbab6ebdd7e9f52798c5c77697560a3b94710add2"},
-    {file = "cached_ipaddress-1.0.1-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:4974a3e6b4ed2767759dd584de0d5ed209319fa9192f708c985e9a20f887cdc6"},
-    {file = "cached_ipaddress-1.0.1-cp314-cp314-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:62368c5dc90f6109b4e54534318276fc3600b4495e4eba0d0c35b96acab4d82e"},
-    {file = "cached_ipaddress-1.0.1-cp314-cp314-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:47e070ee0206fd4b1325cdead9004741f60e7d00356690b6a73c0730450e5ff2"},
-    {file = "cached_ipaddress-1.0.1-cp314-cp314-manylinux2014_armv7l.manylinux_2_17_armv7l.manylinux_2_31_armv7l.whl", hash = "sha256:f134b05a7c41fe2c70599480276c3419f825f1a940cb19da80cbbf0ef76bb3cf"},
-    {file = "cached_ipaddress-1.0.1-cp314-cp314-musllinux_1_2_aarch64.whl", hash = "sha256:643be933ec6860347f43741265ce3d6f8071c27d7549cdd5e6a499ea3e35a8c2"},
-    {file = "cached_ipaddress-1.0.1-cp314-cp314-musllinux_1_2_armv7l.whl", hash = "sha256:6140cc8d14b90a9b59e7e70554849b0b86fa82fadd19b50cebebb6712650502b"},
-    {file = "cached_ipaddress-1.0.1-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:7fc69b28ac45fe38753f030becc7f80bc07ac6d8c70e0b5de65267130e661a7b"},
-    {file = "cached_ipaddress-1.0.1-cp314-cp314-win32.whl", hash = "sha256:e581cdaaafe8b62af82febd5c86b68d1ba538b1fce9744990fb126578fb10f27"},
-    {file = "cached_ipaddress-1.0.1-cp314-cp314-win_amd64.whl", hash = "sha256:ad1e9c3e5a2ceb277c4283e964567b8e72197141713d1e4941c0d76505c78f7f"},
-    {file = "cached_ipaddress-1.0.1-cp314-cp314t-macosx_10_13_x86_64.whl", hash = "sha256:991eab888ee9d698cdc4a5361d091e9f17b1bfaf59ed8168f71c320cca956afc"},
-    {file = "cached_ipaddress-1.0.1-cp314-cp314t-macosx_11_0_arm64.whl", hash = "sha256:46c42330ee5f72098276d68321fc3fbfcb8fee8d57d916186d12e78742637bf8"},
-    {file = "cached_ipaddress-1.0.1-cp314-cp314t-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:2768b52af9a404773b771d3a3c8f5096ea1ca8ae5d3851f6d857608979861b12"},
-    {file = "cached_ipaddress-1.0.1-cp314-cp314t-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:7720bada91f963cfc91a37120cef0514959205bca7f20e813b51b06ed5836a87"},
-    {file = "cached_ipaddress-1.0.1-cp314-cp314t-manylinux2014_armv7l.manylinux_2_17_armv7l.manylinux_2_31_armv7l.whl", hash = "sha256:857328c474e51f8f35d480bdadfb18a8e2a170db97b13826df1740ae1599341b"},
-    {file = "cached_ipaddress-1.0.1-cp314-cp314t-musllinux_1_2_aarch64.whl", hash = "sha256:d36469e19aacf435e496c8063744116a09b4b0fc9bb948465921622bbb86e48b"},
-    {file = "cached_ipaddress-1.0.1-cp314-cp314t-musllinux_1_2_armv7l.whl", hash = "sha256:1f3b9f990be537be6189e39afe5205e4dc5779771427908e33d85bd14ce637b8"},
-    {file = "cached_ipaddress-1.0.1-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:661f7366a166accf0fa0859d9aa66108a71354d262bbfe8676b64afe882cef15"},
-    {file = "cached_ipaddress-1.0.1-cp314-cp314t-win32.whl", hash = "sha256:b80911060be29fa598d1c03fc83102abae9f63c6bac888bd08ab7244509df0fd"},
-    {file = "cached_ipaddress-1.0.1-cp314-cp314t-win_amd64.whl", hash = "sha256:230b3b1cfa6794def0c52a5420484afe199987a03618ec0e93dc6792f0c24516"},
-    {file = "cached_ipaddress-1.0.1-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:c8d4163cbe0a2fdf8e0095fc208fa857e8d11331287d1802236b835ed3efac84"},
-    {file = "cached_ipaddress-1.0.1-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:19507bef4d09759fec3f0119c4f845b96958d14779b7fd28f153c3236d639c52"},
-    {file = "cached_ipaddress-1.0.1-cp39-cp39-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:f751d53ea05c2aced5db6792550c52363fe3ab874dec6f86bafa8d72928a528e"},
-    {file = "cached_ipaddress-1.0.1-cp39-cp39-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:2507f658b2ec7a7b34b7e531a19315a0b8463f20db21164fff17b0ecc81e0f15"},
-    {file = "cached_ipaddress-1.0.1-cp39-cp39-manylinux2014_armv7l.manylinux_2_17_armv7l.manylinux_2_31_armv7l.whl", hash = "sha256:f57238d28e5a27a55d92b87bfd3653a133f2d67d6ff99c994bc8d71b7d2fcc39"},
-    {file = "cached_ipaddress-1.0.1-cp39-cp39-musllinux_1_2_aarch64.whl", hash = "sha256:f50b08fa79563d689f1d5b37b31321cd01d350a4a7d18a454cb34b3bd5551237"},
-    {file = "cached_ipaddress-1.0.1-cp39-cp39-musllinux_1_2_armv7l.whl", hash = "sha256:992a31c63d7c782bd9b908848ea7dd21cd847101e70b56645c76c0447295064d"},
-    {file = "cached_ipaddress-1.0.1-cp39-cp39-musllinux_1_2_x86_64.whl", hash = "sha256:d2d5a88a700f909a039afdeebb5e151bd884f992eb04a7f56b94ffa4352d977b"},
-    {file = "cached_ipaddress-1.0.1-cp39-cp39-win32.whl", hash = "sha256:4dfd6d31d505b0f5232076e43cb93978418f8136937b9b4dde53119818932ee6"},
-    {file = "cached_ipaddress-1.0.1-cp39-cp39-win_amd64.whl", hash = "sha256:0b43cbfc79181d9ceaf145e1df13d8503d12adbdcde139a1706fd061affdac30"},
-    {file = "cached_ipaddress-1.0.1.tar.gz", hash = "sha256:75cc3b782fc5e52bea27ff51f736ccbeabcee187de02c53a092a1b44be7dae3e"},
+    {file = "cached_ipaddress-1.1.1-cp314-cp314-manylinux_2_41_x86_64.whl", hash = "sha256:2b2a3d57878b36682b78e8908a02b0d1c7e04c47093ed7d5b155516883993cd3"},
+    {file = "cached_ipaddress-1.1.1.tar.gz", hash = "sha256:2af1d9d14ae919ad55ab0a855d20eaf4f625580070d0e382a99a91a76168e426"},
 ]
 
 [package.dependencies]
@@ -2204,4 +2134,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<4.0"
-content-hash = "5d0e835e6276eed80617123f1999083622bc7a3540c67d7b763292da4c1fe438"
+content-hash = "f265528ac29a0fb8aae4d3988ea9a4c9ded73f07e3e0286ff2b37aae108a8b95"
