@@ -165,7 +165,7 @@ class DiscoverHosts:
         else:
             self._resolver = DNSResolver(timeout=DNS_RESPONSE_TIMEOUT)
 
-    async def __aenter__(self) -> DiscoverHosts:
+    async def __aenter__(self) -> DiscoverHosts:  # noqa: PYI034
         return self
 
     async def __aexit__(
@@ -205,7 +205,7 @@ class DiscoverHosts:
     def _setup_sys_network_data(self) -> SystemNetworkData:
         ip_route: IPRoute | None = None
         with suppress(Exception):
-            from pyroute2.iproute import IPRoute
+            from pyroute2.iproute import IPRoute  # noqa: PLC0415
 
             ip_route = IPRoute()
         sys_network_data = SystemNetworkData(ip_route)
@@ -239,7 +239,8 @@ class DiscoverHosts:
     async def async_discover(self) -> list[dict[str, str]]:
         """Discover hosts on the network by ARP and PTR lookup."""
         if self._closed:
-            raise RuntimeError("DiscoverHosts instance is closed")
+            msg = "DiscoverHosts instance is closed"
+            raise RuntimeError(msg)
         current_signature = await self._loop.run_in_executor(
             None, resolv_conf_signature
         )
