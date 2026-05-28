@@ -9,6 +9,7 @@ import sys
 from contextlib import suppress
 from dataclasses import dataclass
 from ipaddress import IPv4Address, IPv4Network, IPv6Address, ip_network
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import ifaddr
@@ -67,7 +68,7 @@ def load_resolv_conf_with_signature() -> tuple[
     ResolvConfSignature, list[IPv4Address | IPv6Address]
 ]:
     """Load resolv.conf and return (signature, nameservers) from the same fd."""
-    with open(RESOLV_CONF_PATH) as file:
+    with Path(RESOLV_CONF_PATH).open() as file:
         stat = os.fstat(file.fileno())
         lines = tuple(file)
     return ResolvConfSignature(stat.st_mtime_ns, stat.st_size), parse_resolv_conf(lines)
@@ -76,7 +77,7 @@ def load_resolv_conf_with_signature() -> tuple[
 def resolv_conf_signature() -> ResolvConfSignature | None:
     """Return a signature describing the current resolv.conf, or None if missing."""
     try:
-        stat = os.stat(RESOLV_CONF_PATH)
+        stat = Path(RESOLV_CONF_PATH).stat()
     except OSError:
         return None
     return ResolvConfSignature(stat.st_mtime_ns, stat.st_size)
@@ -95,9 +96,12 @@ def parse_resolv_conf(lines: Iterable[str]) -> list[IPv4Address | IPv6Address]:
         if len(parts) != 2:
             continue
         key, value = parts
-        if key == "nameserver":
-            if (ip_addr := cached_ip_addresses(value)) and ip_addr not in nameservers:
-                nameservers.append(ip_addr)
+        if (
+            key == "nameserver"
+            and (ip_addr := cached_ip_addresses(value))
+            and ip_addr not in nameservers
+        ):
+            nameservers.append(ip_addr)
     return nameservers
 
 
