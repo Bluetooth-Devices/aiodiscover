@@ -13,6 +13,16 @@ from aiodns import DNSResolver
 
 from .network import SystemNetworkData, resolv_conf_signature
 
+# Eagerly import pyroute2 at module-load time so its one-shot side effect —
+# pyroute2/config/__init__.py calling platform.uname(), which on POSIX
+# shells out via subprocess — happens before any asyncio loop is running.
+# Otherwise the first AsyncIPRoute() inside async_discover() blocks the
+# loop briefly, and the test suite's blockbuster fixture rejects it
+# outright. pyroute2 isn't importable on Windows (it pulls in fcntl
+# transitively), which is fine — we never reach AsyncIPRoute() there.
+with suppress(ImportError):
+    import pyroute2  # noqa: F401
+
 if TYPE_CHECKING:
     from collections.abc import Iterable
     from ipaddress import IPv4Address, IPv6Address
