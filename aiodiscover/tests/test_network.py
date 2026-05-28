@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 import asyncio
 import subprocess
 import sys
@@ -14,6 +13,8 @@ from aiodiscover.network import (
     _fill_neighbor,
     _get_macos_default_gateway,
     async_populate_arp,
+    get_attrs_key,
+    get_local_ip,
     load_resolv_conf_with_signature,
     parse_resolv_conf,
     resolv_conf_signature,
@@ -60,6 +61,21 @@ def test_parse_resolv_conf_skips_malformed_lines() -> None:
     ]
 
 
+def test_parse_resolv_conf_skips_non_nameserver_directives_and_duplicates() -> None:
+    """Non-nameserver keys, duplicate IPs, and unparsable IPs are silently dropped."""
+    resolv_conf = parse_resolv_conf(
+        [
+            "domain example.com",
+            "search example.com lan",
+            "options edns0 ndots:1",
+            "nameserver 1.1.1.1",
+            "nameserver 1.1.1.1",
+            "nameserver not-an-ip",
+        ],
+    )
+    assert resolv_conf == [IPv4Address("1.1.1.1")]
+
+
 def test_resolv_conf_signature_returns_stat_tuple(tmp_path: Path) -> None:
     """Signature reflects mtime_ns and size of resolv.conf."""
     resolv = tmp_path / "resolv.conf"
@@ -97,6 +113,44 @@ def test_setup_defaults_nameservers_to_empty_on_windows_without_resolv_conf() ->
         mock_sys.platform = "win32"
         net_data.setup()
     assert net_data.nameservers == []
+
+
+@pytest.mark.parametrize(
+    ("local_ip", "prefix", "expected_router"),
+    [
+        # /24 — fallback unchanged, .0 + 1.
+        ("192.168.1.50", 24, "192.168.1.1"),
+        # Larger-than-/24 prefixes still resolve to .0.0.1-style address.
+        ("192.168.5.50", 16, "192.168.0.1"),
+        # /25 networks above .0: previous heuristic produced .121 here.
+        ("192.168.1.150", 25, "192.168.1.129"),
+        # /26 quarter networks.
+        ("192.168.1.70", 26, "192.168.1.65"),
+        ("192.168.1.150", 26, "192.168.1.129"),
+        # /28 sixteen-host networks.
+        ("192.168.1.50", 28, "192.168.1.49"),
+        # /30 point-to-point — first host is network_address + 1.
+        ("192.168.1.70", 30, "192.168.1.69"),
+    ],
+)
+def test_setup_router_ip_fallback_uses_first_network_host(
+    local_ip: str, prefix: int, expected_router: str
+) -> None:
+    """Without a routing table, the router falls back to the first host of the network."""
+    adapter = MagicMock()
+    adapter.ips = [MagicMock(ip=local_ip, network_prefix=prefix)]
+    net_data = SystemNetworkData(None, local_ip=local_ip)
+    with (
+        patch(
+            "aiodiscover.network.load_resolv_conf_with_signature",
+            side_effect=FileNotFoundError,
+        ),
+        patch("aiodiscover.network.sys") as mock_sys,
+        patch("aiodiscover.network.ifaddr.get_adapters", return_value=[adapter]),
+    ):
+        mock_sys.platform = "win32"
+        net_data.setup()
+    assert net_data.router_ip == IPv4Address(expected_router)
 
 
 def test_setup_propagates_missing_resolv_conf_on_non_windows() -> None:
@@ -248,6 +302,27 @@ def test_get_macos_default_gateway_default_family_is_inet() -> None:
     assert "-inet6" not in args
 
 
+def test_get_local_ip_returns_none_when_connect_fails() -> None:
+    """When the UDP probe socket can't connect to the target, return None."""
+    mock_sock = MagicMock()
+    mock_sock.connect.side_effect = OSError("Network is unreachable")
+    with patch("aiodiscover.network.socket.socket", return_value=mock_sock):
+        assert get_local_ip("10.255.255.255") is None
+    mock_sock.close.assert_called_once()
+
+
+def test_get_attrs_key_returns_value_when_present() -> None:
+    """pyroute2-shaped attrs dict yields the matching value."""
+    data = {"attrs": [("RTA_GATEWAY", "192.168.1.1"), ("RTA_OIF", 2)]}
+    assert get_attrs_key(data, "RTA_GATEWAY") == "192.168.1.1"
+
+
+def test_get_attrs_key_returns_none_when_missing() -> None:
+    """A missing key in the attrs list yields None rather than raising."""
+    data = {"attrs": [("RTA_OIF", 2)]}
+    assert get_attrs_key(data, "RTA_GATEWAY") is None
+
+
 def test_fill_neighbor_accepts_valid_entry() -> None:
     neighbours: dict[str, str] = {}
     _fill_neighbor(neighbours, "192.168.1.5", "aa:bb:cc:dd:ee:ff")
@@ -389,6 +464,7 @@ async def test_async_get_neighbours_arp_timeout_returns_empty() -> None:
     proc.communicate = AsyncMock(side_effect=asyncio.TimeoutError())
     proc.kill = MagicMock()
     proc.wait = AsyncMock()
+    proc.returncode = None
     net_data = SystemNetworkData(None)
     with patch(
         "aiodiscover.network.asyncio.create_subprocess_exec",
@@ -407,6 +483,7 @@ async def test_async_get_neighbours_arp_timeout_survives_already_exited_proc() -
     proc.communicate = AsyncMock(side_effect=asyncio.TimeoutError())
     proc.kill = MagicMock(side_effect=ProcessLookupError)
     proc.wait = AsyncMock()
+    proc.returncode = None
     net_data = SystemNetworkData(None)
     with patch(
         "aiodiscover.network.asyncio.create_subprocess_exec",
@@ -415,6 +492,74 @@ async def test_async_get_neighbours_arp_timeout_survives_already_exited_proc() -
         result = await net_data._async_get_neighbours_arp()
     assert result == {}
     proc.wait.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_async_get_neighbours_arp_cancellation_reaps_proc() -> None:
+    """Caller cancellation mid-communicate kills and reaps before propagating."""
+    proc = MagicMock()
+    proc.communicate = AsyncMock(side_effect=asyncio.CancelledError())
+    proc.kill = MagicMock()
+    proc.wait = AsyncMock()
+    proc.returncode = None
+    net_data = SystemNetworkData(None)
+    with patch(
+        "aiodiscover.network.asyncio.create_subprocess_exec",
+        AsyncMock(return_value=proc),
+    ):
+        with pytest.raises(asyncio.CancelledError):
+            await net_data._async_get_neighbours_arp()
+    proc.kill.assert_called_once_with()
+    proc.wait.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_async_get_neighbours_arp_task_cancel_reaps_proc() -> None:
+    """External task.cancel() during communicate kills and reaps before propagating."""
+    communicate_started = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    block: asyncio.Future[tuple[bytes, bytes]] = loop.create_future()
+
+    async def blocking_communicate() -> tuple[bytes, bytes]:
+        communicate_started.set()
+        return await block
+
+    proc = MagicMock()
+    proc.communicate = blocking_communicate
+    proc.kill = MagicMock()
+    proc.wait = AsyncMock()
+    proc.returncode = None
+    net_data = SystemNetworkData(None)
+    with patch(
+        "aiodiscover.network.asyncio.create_subprocess_exec",
+        AsyncMock(return_value=proc),
+    ):
+        task = asyncio.create_task(net_data._async_get_neighbours_arp())
+        await communicate_started.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    proc.kill.assert_called_once_with()
+    proc.wait.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_async_get_neighbours_arp_normal_exit_does_not_kill() -> None:
+    """A natural exit leaves the proc alone — no spurious kill on success."""
+    proc = MagicMock()
+    proc.communicate = AsyncMock(return_value=(b"", b""))
+    proc.kill = MagicMock()
+    proc.wait = AsyncMock()
+    proc.returncode = 0
+    net_data = SystemNetworkData(None)
+    with patch(
+        "aiodiscover.network.asyncio.create_subprocess_exec",
+        AsyncMock(return_value=proc),
+    ):
+        result = await net_data._async_get_neighbours_arp()
+    assert result == {}
+    proc.kill.assert_not_called()
+    proc.wait.assert_not_awaited()
 
 
 @pytest.mark.asyncio

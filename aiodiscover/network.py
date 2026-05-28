@@ -9,6 +9,7 @@ import sys
 from contextlib import suppress
 from dataclasses import dataclass
 from ipaddress import IPv4Address, IPv4Network, IPv6Address, ip_network
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import ifaddr
@@ -68,7 +69,7 @@ def load_resolv_conf_with_signature() -> tuple[
     ResolvConfSignature, list[IPv4Address | IPv6Address]
 ]:
     """Load resolv.conf and return (signature, nameservers) from the same fd."""
-    with open(RESOLV_CONF_PATH) as file:
+    with Path(RESOLV_CONF_PATH).open() as file:
         stat = os.fstat(file.fileno())
         lines = tuple(file)
     return ResolvConfSignature(stat.st_mtime_ns, stat.st_size), parse_resolv_conf(lines)
@@ -77,7 +78,7 @@ def load_resolv_conf_with_signature() -> tuple[
 def resolv_conf_signature() -> ResolvConfSignature | None:
     """Return a signature describing the current resolv.conf, or None if missing."""
     try:
-        stat = os.stat(RESOLV_CONF_PATH)
+        stat = Path(RESOLV_CONF_PATH).stat()
     except OSError:
         return None
     return ResolvConfSignature(stat.st_mtime_ns, stat.st_size)
@@ -96,9 +97,12 @@ def parse_resolv_conf(lines: Iterable[str]) -> list[IPv4Address | IPv6Address]:
         if len(parts) != 2:
             continue
         key, value = parts
-        if key == "nameserver":
-            if (ip_addr := cached_ip_addresses(value)) and ip_addr not in nameservers:
-                nameservers.append(ip_addr)
+        if (
+            key == "nameserver"
+            and (ip_addr := cached_ip_addresses(value))
+            and ip_addr not in nameservers
+        ):
+            nameservers.append(ip_addr)
     return nameservers
 
 
@@ -276,8 +280,14 @@ class SystemNetworkData:
             if gateway:
                 self.router_ip = _parse_ipv4(gateway)
         if not self.router_ip:
-            network_address = str(self.network.network_address)
-            self.router_ip = _parse_ipv4(f"{network_address[:-1]}1")
+            # First usable host in the network — `network_address + 1` for
+            # any IPv4 prefix /30 or shorter, matching the conventional
+            # router placement. The previous string-slice heuristic
+            # (`network_address[:-1] + "1"`) only happens to produce the
+            # right address when the network address ends in `0`, so it
+            # silently mis-pointed the fallback for /25, /26, /27, /28,
+            # /29, /30 networks whose base is `.64`/`.128`/`.192`/etc.
+            self.router_ip = next(self.network.hosts(), None)
 
     async def async_get_neighbours(self, ips: Iterable[str]) -> dict[str, str]:
         """Get neighbours with best available method."""
@@ -317,11 +327,13 @@ class SystemNetworkData:
         try:
             async with asyncio_timeout(ARP_TIMEOUT):
                 out_data, _ = await arp.communicate()
-        except asyncio.TimeoutError:
+        except (asyncio.TimeoutError, asyncio.CancelledError) as exc:
             with suppress(ProcessLookupError):
                 arp.kill()
             with suppress(OSError):
                 await arp.wait()
+            if isinstance(exc, asyncio.CancelledError):
+                raise
             return neighbours
 
         for line in out_data.decode().splitlines():

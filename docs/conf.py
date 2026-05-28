@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 from __future__ import annotations
 
 #
@@ -15,16 +14,15 @@ from __future__ import annotations
 # serve to show the default.
 # If extensions (or modules to document with autodoc) are in another
 # directory, add these directories to sys.path here. If the directory is
-# relative to the documentation root, use os.path.abspath to make it
+# relative to the documentation root, use Path(...).resolve() to make it
 # absolute, like shown here.
 #
-import os
 import re
 import sys
 from pathlib import Path
 from typing import Any
 
-sys.path.insert(0, os.path.abspath(".."))
+sys.path.insert(0, str(Path("..").resolve()))
 
 _init_path = Path(__file__).parent.parent / "aiodiscover" / "__init__.py"
 _version_match = re.search(
@@ -36,10 +34,6 @@ assert _version_match is not None, (
 __version__ = _version_match.group(1)
 
 # -- General configuration ---------------------------------------------
-
-# If your documentation needs a minimal Sphinx version, state it here.
-#
-# needs_sphinx = "1.0"
 
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named "sphinx.ext.*") or your custom ones.
@@ -76,7 +70,7 @@ master_doc = "index"
 
 # General information about the project.
 project = "Async Host discovery"
-copyright = "2021, J. Nick Koston"
+copyright = "2021, J. Nick Koston"  # noqa: A001
 author = "J. Nick Koston"
 
 # The version info for the project you"re documenting, acts as replacement
@@ -128,20 +122,7 @@ htmlhelp_basename = "aiodiscoverdoc"
 
 # -- Options for LaTeX output ------------------------------------------
 
-latex_elements: dict[str, Any] = {
-    # The paper size ("letterpaper" or "a4paper").
-    #
-    # "papersize": "letterpaper",
-    # The font size ("10pt", "11pt" or "12pt").
-    #
-    # "pointsize": "10pt",
-    # Additional stuff for the LaTeX preamble.
-    #
-    # "preamble": "",
-    # Latex figure (float) alignment
-    #
-    # "figure_align": "htbp",
-}
+latex_elements: dict[str, Any] = {}
 
 # Grouping the document tree into LaTeX files. List of tuples
 # (source start file, target name, title, author, documentclass
