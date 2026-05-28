@@ -1,5 +1,4 @@
 import asyncio
-import subprocess
 import sys
 from collections.abc import AsyncIterator
 from ipaddress import IPv4Address, IPv6Address, ip_address
@@ -12,8 +11,8 @@ import pytest
 from aiodiscover.network import (
     ResolvConfSignature,
     SystemNetworkData,
+    _async_get_macos_default_gateway,
     _fill_neighbor,
-    _get_macos_default_gateway,
     async_populate_arp,
     get_attrs_key,
     get_local_ip,
@@ -233,54 +232,68 @@ destination: default
 """
 
 
-def _mock_run(stdout: str, returncode: int = 0) -> MagicMock:
-    mock = MagicMock()
-    mock.stdout = stdout
-    mock.returncode = returncode
-    return mock
+def _mock_proc(stdout: str, returncode: int = 0) -> MagicMock:
+    proc = MagicMock()
+    proc.communicate = AsyncMock(return_value=(stdout.encode(), b""))
+    proc.returncode = returncode
+    return proc
 
 
-def test_get_macos_default_gateway_parses_gateway_line() -> None:
+@pytest.mark.asyncio
+async def test_get_macos_default_gateway_parses_gateway_line() -> None:
     with patch(
-        "aiodiscover.network.subprocess.run",
-        return_value=_mock_run(ROUTE_OUTPUT_WITH_GATEWAY),
+        "aiodiscover.network.asyncio.create_subprocess_exec",
+        AsyncMock(return_value=_mock_proc(ROUTE_OUTPUT_WITH_GATEWAY)),
     ):
-        assert _get_macos_default_gateway() == "192.168.1.1"
+        assert await _async_get_macos_default_gateway() == "192.168.1.1"
 
 
-def test_get_macos_default_gateway_no_gateway_line() -> None:
+@pytest.mark.asyncio
+async def test_get_macos_default_gateway_no_gateway_line() -> None:
     with patch(
-        "aiodiscover.network.subprocess.run",
-        return_value=_mock_run(ROUTE_OUTPUT_NO_GATEWAY),
+        "aiodiscover.network.asyncio.create_subprocess_exec",
+        AsyncMock(return_value=_mock_proc(ROUTE_OUTPUT_NO_GATEWAY)),
     ):
-        assert _get_macos_default_gateway() is None
+        assert await _async_get_macos_default_gateway() is None
 
 
-def test_get_macos_default_gateway_nonzero_exit() -> None:
+@pytest.mark.asyncio
+async def test_get_macos_default_gateway_nonzero_exit() -> None:
     with patch(
-        "aiodiscover.network.subprocess.run",
-        return_value=_mock_run("", returncode=1),
+        "aiodiscover.network.asyncio.create_subprocess_exec",
+        AsyncMock(return_value=_mock_proc("", returncode=1)),
     ):
-        assert _get_macos_default_gateway() is None
+        assert await _async_get_macos_default_gateway() is None
 
 
-def test_get_macos_default_gateway_subprocess_error() -> None:
+@pytest.mark.asyncio
+async def test_get_macos_default_gateway_timeout() -> None:
+    """A timeout while running `route` yields None and reaps the proc."""
+    proc = MagicMock()
+    proc.communicate = AsyncMock(side_effect=asyncio.TimeoutError())
+    proc.kill = MagicMock()
+    proc.wait = AsyncMock()
+    proc.returncode = None
     with patch(
-        "aiodiscover.network.subprocess.run",
-        side_effect=subprocess.TimeoutExpired(cmd="route", timeout=2),
+        "aiodiscover.network.asyncio.create_subprocess_exec",
+        AsyncMock(return_value=proc),
     ):
-        assert _get_macos_default_gateway() is None
+        assert await _async_get_macos_default_gateway() is None
+    proc.kill.assert_called_once_with()
+    proc.wait.assert_awaited_once_with()
 
 
-def test_get_macos_default_gateway_oserror() -> None:
+@pytest.mark.asyncio
+async def test_get_macos_default_gateway_oserror() -> None:
     with patch(
-        "aiodiscover.network.subprocess.run",
-        side_effect=FileNotFoundError(),
+        "aiodiscover.network.asyncio.create_subprocess_exec",
+        AsyncMock(side_effect=FileNotFoundError()),
     ):
-        assert _get_macos_default_gateway() is None
+        assert await _async_get_macos_default_gateway() is None
 
 
-def test_get_macos_default_gateway_ipv6_strips_zone() -> None:
+@pytest.mark.asyncio
+async def test_get_macos_default_gateway_ipv6_strips_zone() -> None:
     """IPv6 default gateways may include a zone suffix like `%en0`."""
     output = (
         "   route to: default\n"
@@ -288,23 +301,26 @@ def test_get_macos_default_gateway_ipv6_strips_zone() -> None:
         "    gateway: fe80::1%en0\n"
         "  interface: en0\n"
     )
+    mock_exec = AsyncMock(return_value=_mock_proc(output))
     with patch(
-        "aiodiscover.network.subprocess.run",
-        return_value=_mock_run(output),
-    ) as mock_run:
-        assert _get_macos_default_gateway("inet6") == "fe80::1"
+        "aiodiscover.network.asyncio.create_subprocess_exec",
+        mock_exec,
+    ):
+        assert await _async_get_macos_default_gateway("inet6") == "fe80::1"
     # Family argument must reach the route command.
-    args = mock_run.call_args[0][0]
+    args = mock_exec.call_args[0]
     assert "-inet6" in args
 
 
-def test_get_macos_default_gateway_default_family_is_inet() -> None:
+@pytest.mark.asyncio
+async def test_get_macos_default_gateway_default_family_is_inet() -> None:
+    mock_exec = AsyncMock(return_value=_mock_proc(ROUTE_OUTPUT_WITH_GATEWAY))
     with patch(
-        "aiodiscover.network.subprocess.run",
-        return_value=_mock_run(ROUTE_OUTPUT_WITH_GATEWAY),
-    ) as mock_run:
-        _get_macos_default_gateway()
-    args = mock_run.call_args[0][0]
+        "aiodiscover.network.asyncio.create_subprocess_exec",
+        mock_exec,
+    ):
+        await _async_get_macos_default_gateway()
+    args = mock_exec.call_args[0]
     assert "-inet" in args
     assert "-inet6" not in args
 
@@ -713,9 +729,10 @@ async def test_async_get_neighbours_ip_route_parses_attrs() -> None:
 @pytest.mark.skipif(
     sys.platform != "darwin", reason="route -n get default is macOS-specific"
 )
-def test_get_macos_default_gateway_e2e() -> None:
+@pytest.mark.asyncio
+async def test_get_macos_default_gateway_e2e() -> None:
     """End-to-end: actually run `route -n get default` and verify parsing."""
-    result = _get_macos_default_gateway()
+    result = await _async_get_macos_default_gateway()
     if result is None:
         # No default gateway (e.g. VPN-only default route or no network) is a
         # valid outcome; the function must not raise.
