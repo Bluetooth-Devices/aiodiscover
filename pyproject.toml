@@ -209,9 +209,10 @@ select = [
     "TC003",
 ]
 "aiodiscover/cli.py" = ["T203"]
+"profile_discovery.py" = ["T203"]
 "setup.py" = ["D100"]
 "conftest.py" = ["D100"]
-"docs/conf.py" = ["D100"]
+"docs/conf.py" = ["D100", "INP001"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["aiodiscover", "tests"]
