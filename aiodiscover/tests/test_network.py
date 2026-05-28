@@ -13,6 +13,7 @@ from aiodiscover.network import (
     SystemNetworkData,
     _async_get_macos_default_gateway,
     _fill_neighbor,
+    async_get_router_ip,
     async_populate_arp,
     get_attrs_key,
     get_local_ip,
@@ -284,6 +285,24 @@ async def test_get_macos_default_gateway_timeout() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_macos_default_gateway_cancel_reraises() -> None:
+    """Caller cancellation mid-communicate kills, reaps, and propagates."""
+    proc = MagicMock()
+    proc.communicate = AsyncMock(side_effect=asyncio.CancelledError())
+    proc.kill = MagicMock()
+    proc.wait = AsyncMock()
+    proc.returncode = None
+    with patch(
+        "aiodiscover.network.asyncio.create_subprocess_exec",
+        AsyncMock(return_value=proc),
+    ):
+        with pytest.raises(asyncio.CancelledError):
+            await _async_get_macos_default_gateway()
+    proc.kill.assert_called_once_with()
+    proc.wait.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
 async def test_get_macos_default_gateway_oserror() -> None:
     with patch(
         "aiodiscover.network.asyncio.create_subprocess_exec",
@@ -332,6 +351,14 @@ def test_get_local_ip_returns_none_when_connect_fails() -> None:
     with patch("aiodiscover.network.socket.socket", return_value=mock_sock):
         assert get_local_ip("10.255.255.255") is None
     mock_sock.close.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_async_get_router_ip_returns_none_when_no_default_routes() -> None:
+    """An empty default-routes table yields None instead of IndexError."""
+    ipr = MagicMock()
+    ipr.get_default_routes = AsyncMock(return_value=_as_async_gen([]))
+    assert await async_get_router_ip(ipr) is None
 
 
 def test_get_attrs_key_returns_value_when_present() -> None:
