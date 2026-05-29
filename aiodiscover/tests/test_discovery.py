@@ -1126,6 +1126,33 @@ async def test_setup_failure_tolerates_close_error() -> None:
     fake_ip_route.close.assert_called_once()
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="pyroute2.iproute imports fcntl, which is not available on Windows",
+)
+@pytest.mark.asyncio
+async def test_setup_failure_with_no_ip_route() -> None:
+    """When AsyncIPRoute construction fails, the except handler skips close()."""
+    fake_resolver = MagicMock()
+    fake_resolver.close = AsyncMock()
+
+    import pyroute2
+
+    with (
+        patch("aiodiscover.discovery.DNSResolver", return_value=fake_resolver),
+        patch.object(
+            pyroute2, "AsyncIPRoute", side_effect=Exception("construction failed")
+        ),
+        patch(
+            "aiodiscover.network.SystemNetworkData.async_setup",
+            side_effect=RuntimeError("no local ip"),
+        ),
+    ):
+        async with discovery.DiscoverHosts() as discover_hosts:
+            with pytest.raises(RuntimeError, match="no local ip"):
+                await discover_hosts._setup_sys_network_data()
+
+
 @pytest.mark.asyncio
 async def test_resolv_conf_reload_closes_old_ip_route() -> None:
     """When resolv.conf changes, the previous IPRoute socket is closed before reloading."""
