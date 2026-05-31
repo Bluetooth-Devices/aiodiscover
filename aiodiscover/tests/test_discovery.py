@@ -707,7 +707,7 @@ async def test_reload_on_resolv_conf_change(
 
     setup_results = [net_data_1, net_data_2]
 
-    def fake_setup() -> SystemNetworkData:
+    async def fake_setup() -> SystemNetworkData:
         return setup_results.pop(0)
 
     signature_calls = iter([(1, 100), (2, 100)])
@@ -752,7 +752,7 @@ async def test_no_reload_when_resolv_conf_unchanged(
 
     call_count = 0
 
-    def fake_setup() -> SystemNetworkData:
+    async def fake_setup() -> SystemNetworkData:
         nonlocal call_count
         call_count += 1
         return net_data
@@ -801,7 +801,7 @@ async def test_reload_when_resolv_conf_appears(
 
     setup_results = [net_data_1, net_data_2]
 
-    def fake_setup() -> SystemNetworkData:
+    async def fake_setup() -> SystemNetworkData:
         return setup_results.pop(0)
 
     signature_calls = iter([None, (5, 80)])
@@ -1075,24 +1075,24 @@ async def test_async_discover_after_close_raises() -> None:
 )
 @pytest.mark.asyncio
 async def test_setup_failure_closes_ip_route() -> None:
-    """_setup_sys_network_data closes the IPRoute if SystemNetworkData.setup() raises."""
+    """_setup_sys_network_data closes AsyncIPRoute if async_setup() raises."""
     fake_resolver = MagicMock()
     fake_resolver.close = AsyncMock()
     fake_ip_route = MagicMock()
 
-    import pyroute2.iproute as pyroute2_iproute
+    import pyroute2
 
     with (
         patch("aiodiscover.discovery.DNSResolver", return_value=fake_resolver),
-        patch.object(pyroute2_iproute, "IPRoute", return_value=fake_ip_route),
+        patch.object(pyroute2, "AsyncIPRoute", return_value=fake_ip_route),
         patch(
-            "aiodiscover.network.SystemNetworkData.setup",
+            "aiodiscover.network.SystemNetworkData.async_setup",
             side_effect=RuntimeError("no local ip"),
         ),
     ):
         async with discovery.DiscoverHosts() as discover_hosts:
             with pytest.raises(RuntimeError, match="no local ip"):
-                discover_hosts._setup_sys_network_data()
+                await discover_hosts._setup_sys_network_data()
 
     fake_ip_route.close.assert_called_once()
 
@@ -1103,27 +1103,54 @@ async def test_setup_failure_closes_ip_route() -> None:
 )
 @pytest.mark.asyncio
 async def test_setup_failure_tolerates_close_error() -> None:
-    """An OSError from IPRoute.close() during a setup failure does not mask the original error."""
+    """An OSError from AsyncIPRoute.close() during setup failure does not mask the original error."""
     fake_resolver = MagicMock()
     fake_resolver.close = AsyncMock()
     fake_ip_route = MagicMock()
     fake_ip_route.close.side_effect = OSError("already closed")
 
-    import pyroute2.iproute as pyroute2_iproute
+    import pyroute2
 
     with (
         patch("aiodiscover.discovery.DNSResolver", return_value=fake_resolver),
-        patch.object(pyroute2_iproute, "IPRoute", return_value=fake_ip_route),
+        patch.object(pyroute2, "AsyncIPRoute", return_value=fake_ip_route),
         patch(
-            "aiodiscover.network.SystemNetworkData.setup",
+            "aiodiscover.network.SystemNetworkData.async_setup",
             side_effect=RuntimeError("no local ip"),
         ),
     ):
         async with discovery.DiscoverHosts() as discover_hosts:
             with pytest.raises(RuntimeError, match="no local ip"):
-                discover_hosts._setup_sys_network_data()
+                await discover_hosts._setup_sys_network_data()
 
     fake_ip_route.close.assert_called_once()
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="pyroute2.iproute imports fcntl, which is not available on Windows",
+)
+@pytest.mark.asyncio
+async def test_setup_failure_with_no_ip_route() -> None:
+    """When AsyncIPRoute construction fails, the except handler skips close()."""
+    fake_resolver = MagicMock()
+    fake_resolver.close = AsyncMock()
+
+    import pyroute2
+
+    with (
+        patch("aiodiscover.discovery.DNSResolver", return_value=fake_resolver),
+        patch.object(
+            pyroute2, "AsyncIPRoute", side_effect=Exception("construction failed")
+        ),
+        patch(
+            "aiodiscover.network.SystemNetworkData.async_setup",
+            side_effect=RuntimeError("no local ip"),
+        ),
+    ):
+        async with discovery.DiscoverHosts() as discover_hosts:
+            with pytest.raises(RuntimeError, match="no local ip"):
+                await discover_hosts._setup_sys_network_data()
 
 
 @pytest.mark.asyncio
@@ -1146,7 +1173,7 @@ async def test_resolv_conf_reload_closes_old_ip_route() -> None:
 
     setup_results = [net_data_1, net_data_2]
 
-    def fake_setup() -> SystemNetworkData:
+    async def fake_setup() -> SystemNetworkData:
         return setup_results.pop(0)
 
     signature_calls = iter([(1, 100), (2, 100)])
@@ -1209,7 +1236,7 @@ async def test_resolv_conf_reload_tolerates_old_ip_route_close_error() -> None:
 
     setup_results = [net_data_1, net_data_2]
 
-    def fake_setup() -> SystemNetworkData:
+    async def fake_setup() -> SystemNetworkData:
         return setup_results.pop(0)
 
     signature_calls = iter([(1, 100), (2, 100)])

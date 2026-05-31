@@ -1,8 +1,9 @@
 import asyncio
-import subprocess
 import sys
+from collections.abc import AsyncIterator
 from ipaddress import IPv4Address, IPv6Address, ip_address
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -10,8 +11,9 @@ import pytest
 from aiodiscover.network import (
     ResolvConfSignature,
     SystemNetworkData,
+    _async_get_macos_default_gateway,
     _fill_neighbor,
-    _get_macos_default_gateway,
+    async_get_router_ip,
     async_populate_arp,
     get_attrs_key,
     get_local_ip,
@@ -99,7 +101,10 @@ def test_resolv_conf_signature_missing_file_returns_none() -> None:
         assert resolv_conf_signature() is None
 
 
-def test_setup_defaults_nameservers_to_empty_on_windows_without_resolv_conf() -> None:
+@pytest.mark.asyncio
+async def test_setup_defaults_nameservers_to_empty_on_windows_without_resolv_conf() -> (
+    None
+):
     """On Windows, a missing resolv.conf leaves nameservers as an empty list."""
     net_data = SystemNetworkData(None, local_ip="192.168.1.10")
     with (
@@ -111,7 +116,7 @@ def test_setup_defaults_nameservers_to_empty_on_windows_without_resolv_conf() ->
         patch("aiodiscover.network.ifaddr.get_adapters", return_value=[]),
     ):
         mock_sys.platform = "win32"
-        net_data.setup()
+        await net_data.async_setup()
     assert net_data.nameservers == []
 
 
@@ -133,7 +138,8 @@ def test_setup_defaults_nameservers_to_empty_on_windows_without_resolv_conf() ->
         ("192.168.1.70", 30, "192.168.1.69"),
     ],
 )
-def test_setup_router_ip_fallback_uses_first_network_host(
+@pytest.mark.asyncio
+async def test_setup_router_ip_fallback_uses_first_network_host(
     local_ip: str, prefix: int, expected_router: str
 ) -> None:
     """Without a routing table, the router falls back to the first host of the network."""
@@ -149,11 +155,12 @@ def test_setup_router_ip_fallback_uses_first_network_host(
         patch("aiodiscover.network.ifaddr.get_adapters", return_value=[adapter]),
     ):
         mock_sys.platform = "win32"
-        net_data.setup()
+        await net_data.async_setup()
     assert net_data.router_ip == IPv4Address(expected_router)
 
 
-def test_setup_propagates_missing_resolv_conf_on_non_windows() -> None:
+@pytest.mark.asyncio
+async def test_setup_propagates_missing_resolv_conf_on_non_windows() -> None:
     """On Linux/macOS, a missing resolv.conf still bubbles up."""
     net_data = SystemNetworkData(None, local_ip="192.168.1.10")
     with (
@@ -165,7 +172,7 @@ def test_setup_propagates_missing_resolv_conf_on_non_windows() -> None:
     ):
         mock_sys.platform = "linux"
         with pytest.raises(FileNotFoundError):
-            net_data.setup()
+            await net_data.async_setup()
 
 
 def test_load_resolv_conf_with_signature_matches_fstat(tmp_path: Path) -> None:
@@ -226,54 +233,134 @@ destination: default
 """
 
 
-def _mock_run(stdout: str, returncode: int = 0) -> MagicMock:
-    mock = MagicMock()
-    mock.stdout = stdout
-    mock.returncode = returncode
-    return mock
+def _mock_proc(stdout: str, returncode: int = 0) -> MagicMock:
+    proc = MagicMock()
+    proc.communicate = AsyncMock(return_value=(stdout.encode(), b""))
+    proc.returncode = returncode
+    return proc
 
 
-def test_get_macos_default_gateway_parses_gateway_line() -> None:
+@pytest.mark.asyncio
+async def test_get_macos_default_gateway_parses_gateway_line() -> None:
     with patch(
-        "aiodiscover.network.subprocess.run",
-        return_value=_mock_run(ROUTE_OUTPUT_WITH_GATEWAY),
+        "aiodiscover.network.asyncio.create_subprocess_exec",
+        AsyncMock(return_value=_mock_proc(ROUTE_OUTPUT_WITH_GATEWAY)),
     ):
-        assert _get_macos_default_gateway() == "192.168.1.1"
+        assert await _async_get_macos_default_gateway() == "192.168.1.1"
 
 
-def test_get_macos_default_gateway_no_gateway_line() -> None:
+@pytest.mark.asyncio
+async def test_get_macos_default_gateway_no_gateway_line() -> None:
     with patch(
-        "aiodiscover.network.subprocess.run",
-        return_value=_mock_run(ROUTE_OUTPUT_NO_GATEWAY),
+        "aiodiscover.network.asyncio.create_subprocess_exec",
+        AsyncMock(return_value=_mock_proc(ROUTE_OUTPUT_NO_GATEWAY)),
     ):
-        assert _get_macos_default_gateway() is None
+        assert await _async_get_macos_default_gateway() is None
 
 
-def test_get_macos_default_gateway_nonzero_exit() -> None:
+@pytest.mark.asyncio
+async def test_get_macos_default_gateway_nonzero_exit() -> None:
     with patch(
-        "aiodiscover.network.subprocess.run",
-        return_value=_mock_run("", returncode=1),
+        "aiodiscover.network.asyncio.create_subprocess_exec",
+        AsyncMock(return_value=_mock_proc("", returncode=1)),
     ):
-        assert _get_macos_default_gateway() is None
+        assert await _async_get_macos_default_gateway() is None
 
 
-def test_get_macos_default_gateway_subprocess_error() -> None:
+@pytest.mark.asyncio
+async def test_get_macos_default_gateway_timeout() -> None:
+    """A timeout while running `route` yields None and reaps the proc."""
+    proc = MagicMock()
+    proc.communicate = AsyncMock(side_effect=asyncio.TimeoutError())
+    proc.kill = MagicMock()
+    proc.wait = AsyncMock()
+    proc.returncode = None
     with patch(
-        "aiodiscover.network.subprocess.run",
-        side_effect=subprocess.TimeoutExpired(cmd="route", timeout=2),
+        "aiodiscover.network.asyncio.create_subprocess_exec",
+        AsyncMock(return_value=proc),
     ):
-        assert _get_macos_default_gateway() is None
+        assert await _async_get_macos_default_gateway() is None
+    proc.kill.assert_called_once_with()
+    proc.wait.assert_awaited_once_with()
 
 
-def test_get_macos_default_gateway_oserror() -> None:
+@pytest.mark.asyncio
+async def test_get_macos_default_gateway_cancel_reraises() -> None:
+    """Caller cancellation mid-communicate kills, reaps, and propagates."""
+    proc = MagicMock()
+    proc.communicate = AsyncMock(side_effect=asyncio.CancelledError())
+    proc.kill = MagicMock()
+    proc.wait = AsyncMock()
+    proc.returncode = None
     with patch(
-        "aiodiscover.network.subprocess.run",
-        side_effect=FileNotFoundError(),
+        "aiodiscover.network.asyncio.create_subprocess_exec",
+        AsyncMock(return_value=proc),
     ):
-        assert _get_macos_default_gateway() is None
+        with pytest.raises(asyncio.CancelledError):
+            await _async_get_macos_default_gateway()
+    proc.kill.assert_called_once_with()
+    proc.wait.assert_awaited_once_with()
 
 
-def test_get_macos_default_gateway_ipv6_strips_zone() -> None:
+@pytest.mark.asyncio
+async def test_get_macos_default_gateway_oserror() -> None:
+    with patch(
+        "aiodiscover.network.asyncio.create_subprocess_exec",
+        AsyncMock(side_effect=FileNotFoundError()),
+    ):
+        assert await _async_get_macos_default_gateway() is None
+
+
+@pytest.mark.asyncio
+async def test_get_macos_default_gateway_timeout_survives_already_exited_proc() -> None:
+    """If kill races a natural exit, ProcessLookupError is swallowed."""
+    proc = MagicMock()
+    proc.communicate = AsyncMock(side_effect=asyncio.TimeoutError())
+    proc.kill = MagicMock(side_effect=ProcessLookupError)
+    proc.wait = AsyncMock()
+    proc.returncode = None
+    with patch(
+        "aiodiscover.network.asyncio.create_subprocess_exec",
+        AsyncMock(return_value=proc),
+    ):
+        assert await _async_get_macos_default_gateway() is None
+    proc.wait.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_get_macos_default_gateway_timeout_swallows_wait_oserror() -> None:
+    """If reaping the killed proc raises OSError, the timeout still yields None."""
+    proc = MagicMock()
+    proc.communicate = AsyncMock(side_effect=asyncio.TimeoutError())
+    proc.kill = MagicMock()
+    proc.wait = AsyncMock(side_effect=OSError("already reaped"))
+    proc.returncode = None
+    with patch(
+        "aiodiscover.network.asyncio.create_subprocess_exec",
+        AsyncMock(return_value=proc),
+    ):
+        assert await _async_get_macos_default_gateway() is None
+    proc.kill.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+async def test_get_macos_default_gateway_empty_after_zone_strip() -> None:
+    """A gateway line consisting solely of a zone suffix yields None, not ''."""
+    output = (
+        "   route to: default\n"
+        "destination: default\n"
+        "    gateway: %en0\n"
+        "  interface: en0\n"
+    )
+    with patch(
+        "aiodiscover.network.asyncio.create_subprocess_exec",
+        AsyncMock(return_value=_mock_proc(output)),
+    ):
+        assert await _async_get_macos_default_gateway("inet6") is None
+
+
+@pytest.mark.asyncio
+async def test_get_macos_default_gateway_ipv6_strips_zone() -> None:
     """IPv6 default gateways may include a zone suffix like `%en0`."""
     output = (
         "   route to: default\n"
@@ -281,23 +368,26 @@ def test_get_macos_default_gateway_ipv6_strips_zone() -> None:
         "    gateway: fe80::1%en0\n"
         "  interface: en0\n"
     )
+    mock_exec = AsyncMock(return_value=_mock_proc(output))
     with patch(
-        "aiodiscover.network.subprocess.run",
-        return_value=_mock_run(output),
-    ) as mock_run:
-        assert _get_macos_default_gateway("inet6") == "fe80::1"
+        "aiodiscover.network.asyncio.create_subprocess_exec",
+        mock_exec,
+    ):
+        assert await _async_get_macos_default_gateway("inet6") == "fe80::1"
     # Family argument must reach the route command.
-    args = mock_run.call_args[0][0]
+    args = mock_exec.call_args[0]
     assert "-inet6" in args
 
 
-def test_get_macos_default_gateway_default_family_is_inet() -> None:
+@pytest.mark.asyncio
+async def test_get_macos_default_gateway_default_family_is_inet() -> None:
+    mock_exec = AsyncMock(return_value=_mock_proc(ROUTE_OUTPUT_WITH_GATEWAY))
     with patch(
-        "aiodiscover.network.subprocess.run",
-        return_value=_mock_run(ROUTE_OUTPUT_WITH_GATEWAY),
-    ) as mock_run:
-        _get_macos_default_gateway()
-    args = mock_run.call_args[0][0]
+        "aiodiscover.network.asyncio.create_subprocess_exec",
+        mock_exec,
+    ):
+        await _async_get_macos_default_gateway()
+    args = mock_exec.call_args[0]
     assert "-inet" in args
     assert "-inet6" not in args
 
@@ -309,6 +399,117 @@ def test_get_local_ip_returns_none_when_connect_fails() -> None:
     with patch("aiodiscover.network.socket.socket", return_value=mock_sock):
         assert get_local_ip("10.255.255.255") is None
     mock_sock.close.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_async_get_router_ip_returns_none_when_no_default_routes() -> None:
+    """An empty default-routes table yields None instead of IndexError."""
+    ipr = MagicMock()
+    ipr.get_default_routes = AsyncMock(return_value=_as_async_gen([]))
+    assert await async_get_router_ip(ipr) is None
+
+
+@pytest.mark.asyncio
+async def test_async_get_router_ip_returns_none_when_route_lacks_gateway() -> None:
+    """A default route without RTA_GATEWAY yields None, not the next iter result."""
+    ipr = MagicMock()
+    ipr.get_default_routes = AsyncMock(
+        return_value=_as_async_gen([{"attrs": [("RTA_OIF", 2)]}])
+    )
+    assert await async_get_router_ip(ipr) is None
+
+
+@pytest.mark.asyncio
+async def test_async_setup_queries_router_ip_via_ip_route() -> None:
+    """With an AsyncIPRoute, async_setup obtains the router ip from netlink."""
+    ipr = MagicMock()
+    ipr.get_default_routes = AsyncMock(
+        return_value=_as_async_gen(
+            [{"attrs": [("RTA_GATEWAY", "192.168.1.1"), ("RTA_OIF", 2)]}]
+        )
+    )
+    net_data = SystemNetworkData(ipr, local_ip="192.168.1.10")
+    adapter = MagicMock()
+    adapter.ips = [MagicMock(ip="192.168.1.10", network_prefix=24)]
+    with (
+        patch(
+            "aiodiscover.network.load_resolv_conf_with_signature",
+            return_value=(ResolvConfSignature(0, 0), []),
+        ),
+        patch("aiodiscover.network.sys") as mock_sys,
+        patch("aiodiscover.network.ifaddr.get_adapters", return_value=[adapter]),
+    ):
+        mock_sys.platform = "linux"
+        await net_data.async_setup()
+    assert net_data.router_ip == IPv4Address("192.168.1.1")
+
+
+@pytest.mark.asyncio
+async def test_async_setup_swallows_router_ip_lookup_error() -> None:
+    """If async_get_router_ip raises, async_setup falls back to network heuristic."""
+    ipr = MagicMock()
+    ipr.get_default_routes = AsyncMock(side_effect=RuntimeError("netlink down"))
+    net_data = SystemNetworkData(ipr, local_ip="192.168.1.10")
+    adapter = MagicMock()
+    adapter.ips = [MagicMock(ip="192.168.1.10", network_prefix=24)]
+    with (
+        patch(
+            "aiodiscover.network.load_resolv_conf_with_signature",
+            return_value=(ResolvConfSignature(0, 0), []),
+        ),
+        patch("aiodiscover.network.sys") as mock_sys,
+        patch("aiodiscover.network.ifaddr.get_adapters", return_value=[adapter]),
+    ):
+        mock_sys.platform = "linux"
+        await net_data.async_setup()
+    # Falls back to first host in network.
+    assert net_data.router_ip == IPv4Address("192.168.1.1")
+
+
+@pytest.mark.asyncio
+async def test_async_setup_darwin_uses_macos_gateway_fallback() -> None:
+    """On macOS without pyroute2, async_setup parses `route -n get default`."""
+    net_data = SystemNetworkData(None, local_ip="192.168.1.10")
+    adapter = MagicMock()
+    adapter.ips = [MagicMock(ip="192.168.1.10", network_prefix=24)]
+    with (
+        patch(
+            "aiodiscover.network.load_resolv_conf_with_signature",
+            return_value=(ResolvConfSignature(0, 0), []),
+        ),
+        patch("aiodiscover.network.sys") as mock_sys,
+        patch("aiodiscover.network.ifaddr.get_adapters", return_value=[adapter]),
+        patch(
+            "aiodiscover.network._async_get_macos_default_gateway",
+            AsyncMock(return_value="192.168.1.254"),
+        ),
+    ):
+        mock_sys.platform = "darwin"
+        await net_data.async_setup()
+    assert net_data.router_ip == IPv4Address("192.168.1.254")
+
+
+@pytest.mark.asyncio
+async def test_async_setup_darwin_macos_gateway_returns_none_falls_back() -> None:
+    """On macOS without a default gateway, async_setup falls back to first-host."""
+    net_data = SystemNetworkData(None, local_ip="192.168.1.10")
+    adapter = MagicMock()
+    adapter.ips = [MagicMock(ip="192.168.1.10", network_prefix=24)]
+    with (
+        patch(
+            "aiodiscover.network.load_resolv_conf_with_signature",
+            return_value=(ResolvConfSignature(0, 0), []),
+        ),
+        patch("aiodiscover.network.sys") as mock_sys,
+        patch("aiodiscover.network.ifaddr.get_adapters", return_value=[adapter]),
+        patch(
+            "aiodiscover.network._async_get_macos_default_gateway",
+            AsyncMock(return_value=None),
+        ),
+    ):
+        mock_sys.platform = "darwin"
+        await net_data.async_setup()
+    assert net_data.router_ip == IPv4Address("192.168.1.1")
 
 
 def test_get_attrs_key_returns_value_when_present() -> None:
@@ -394,19 +595,26 @@ def test_async_populate_arp_swallows_send_errors() -> None:
     assert sock_instance.sendto.call_count == 2
 
 
+async def _as_async_gen(items: list[Any]) -> AsyncIterator[Any]:
+    for item in items:
+        yield item
+
+
 @pytest.mark.asyncio
 async def test_async_get_neighbours_ip_route_parses_linux_keys() -> None:
     """Linux netlink NDA_DST / NDA_LLADDR attrs feed the neighbour map."""
     ip_route = MagicMock()
-    ip_route.get_neighbours = MagicMock(
-        return_value=[
-            {
-                "attrs": [
-                    ("NDA_DST", "192.168.1.5"),
-                    ("NDA_LLADDR", "aa:bb:cc:dd:ee:ff"),
-                ],
-            },
-        ],
+    ip_route.get_neighbours = AsyncMock(
+        return_value=_as_async_gen(
+            [
+                {
+                    "attrs": [
+                        ("NDA_DST", "192.168.1.5"),
+                        ("NDA_LLADDR", "aa:bb:cc:dd:ee:ff"),
+                    ],
+                },
+            ]
+        ),
     )
     net_data = SystemNetworkData(ip_route)
     result = await net_data._async_get_neighbours_ip_route()
@@ -417,16 +625,18 @@ async def test_async_get_neighbours_ip_route_parses_linux_keys() -> None:
 async def test_async_get_neighbours_ip_route_parses_darwin_keys() -> None:
     """pyroute2's macOS stub uses NEIGH_IP / NEIGH_LLADDR; both names parse."""
     ip_route = MagicMock()
-    ip_route.get_neighbours = MagicMock(
-        return_value=[
-            {
-                "attrs": [
-                    ("NEIGH_IP", "192.168.1.6"),
-                    ("NEIGH_LLADDR", "11:22:33:44:55:66"),
-                    ("NEIGH_IFNAME", "en0"),
-                ],
-            },
-        ],
+    ip_route.get_neighbours = AsyncMock(
+        return_value=_as_async_gen(
+            [
+                {
+                    "attrs": [
+                        ("NEIGH_IP", "192.168.1.6"),
+                        ("NEIGH_LLADDR", "11:22:33:44:55:66"),
+                        ("NEIGH_IFNAME", "en0"),
+                    ],
+                },
+            ]
+        ),
     )
     net_data = SystemNetworkData(ip_route)
     result = await net_data._async_get_neighbours_ip_route()
@@ -673,16 +883,22 @@ async def test_async_get_neighbours_closes_arp_socket_on_cancel() -> None:
 async def test_async_get_neighbours_ip_route_parses_attrs() -> None:
     """The pyroute2 path extracts NDA_DST + NDA_LLADDR per neighbour."""
     ip_route = MagicMock()
-    ip_route.get_neighbours.return_value = [
-        {
-            "attrs": [
-                ("NDA_DST", "192.168.1.5"),
-                ("NDA_LLADDR", "aa:bb:cc:dd:ee:ff"),
-            ],
-        },
-        {"attrs": [("NDA_DST", "192.168.1.6")]},  # missing mac → dropped
-        {"attrs": [("NDA_LLADDR", "11:22:33:44:55:66")]},  # missing ip → dropped
-    ]
+    ip_route.get_neighbours = AsyncMock(
+        return_value=_as_async_gen(
+            [
+                {
+                    "attrs": [
+                        ("NDA_DST", "192.168.1.5"),
+                        ("NDA_LLADDR", "aa:bb:cc:dd:ee:ff"),
+                    ],
+                },
+                {"attrs": [("NDA_DST", "192.168.1.6")]},  # missing mac → dropped
+                {
+                    "attrs": [("NDA_LLADDR", "11:22:33:44:55:66")]
+                },  # missing ip → dropped
+            ]
+        )
+    )
     net_data = SystemNetworkData(ip_route)
     result = await net_data._async_get_neighbours_ip_route()
     assert result == {"192.168.1.5": "aa:bb:cc:dd:ee:ff"}
@@ -691,9 +907,10 @@ async def test_async_get_neighbours_ip_route_parses_attrs() -> None:
 @pytest.mark.skipif(
     sys.platform != "darwin", reason="route -n get default is macOS-specific"
 )
-def test_get_macos_default_gateway_e2e() -> None:
+@pytest.mark.asyncio
+async def test_get_macos_default_gateway_e2e() -> None:
     """End-to-end: actually run `route -n get default` and verify parsing."""
-    result = _get_macos_default_gateway()
+    result = await _async_get_macos_default_gateway()
     if result is None:
         # No default gateway (e.g. VPN-only default route or no network) is a
         # valid outcome; the function must not raise.
