@@ -1,17 +1,19 @@
 from __future__ import annotations
 
+import contextlib
 from collections.abc import AsyncIterator, Iterator
+from typing import Any
 
 import pytest
 import pytest_asyncio
 
 from aiodiscover import discovery
 
-try:
+BlockBuster: Any = None
+blockbuster_ctx: Any = None
+
+with contextlib.suppress(ImportError):
     from blockbuster import BlockBuster, blockbuster_ctx
-except ImportError:
-    BlockBuster = None  # type: ignore[assignment,misc]
-    blockbuster_ctx = None  # type: ignore[assignment]
 
 
 @pytest.fixture(autouse=True)
