@@ -13,7 +13,10 @@ BlockBuster: Any = None
 blockbuster_ctx: Any = None
 
 with contextlib.suppress(ImportError):
-    from blockbuster import BlockBuster, blockbuster_ctx
+    import blockbuster as _bb
+
+    BlockBuster = _bb.BlockBuster
+    blockbuster_ctx = _bb.blockbuster_ctx
 
 
 @pytest.fixture(autouse=True)
