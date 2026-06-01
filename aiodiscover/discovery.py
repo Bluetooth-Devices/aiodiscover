@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from ipaddress import IPv4Address, IPv6Address
     from types import TracebackType
 
+    from aiodns import AresQueryPTRResult
     from pyroute2 import AsyncIPRoute
 
     from .network import ResolvConfSignature
@@ -84,18 +85,15 @@ def dns_message_short_hostname(dns_message: Any | None) -> str | None:
 async def async_query_for_ptrs(
     resolver: DNSResolver,
     ips_to_lookup: list[IPv4Address],
-) -> list[Any | None]:
+) -> list[AresQueryPTRResult | None]:
     """Fetch PTR records for a list of ips."""
-    results: list[Any | None] = []
+    results: list[AresQueryPTRResult | None] = []
     # Track the in-flight futures of the *current* chunk so a cancellation
     # mid-`asyncio.wait` can be cleaned up in the finally block. asyncio.wait
     # does not cancel its wrapped futures when its task is cancelled, so we
     # must do it ourselves to keep pycares from leaking query slots and from
     # later firing "exception was never retrieved" warnings.
-    # aiodns' PTR overload returns `asyncio.Future[list[pycares.ares_query_ptr_result]]`,
-    # but pycares ships no stubs so mypy degrades the inner type to `Any`; `list[Any]`
-    # is the tightest annotation that doesn't disagree with what aiodns hands us.
-    in_flight: list[asyncio.Future[list[Any]]] = []
+    in_flight: list[asyncio.Future[AresQueryPTRResult]] = []
     try:
         for ip_chunk in chunked(ips_to_lookup, QUERY_BUCKET_SIZE):
             if TYPE_CHECKING:
