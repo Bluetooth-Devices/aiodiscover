@@ -197,14 +197,14 @@ forbiddenfruit = {version = ">=0.1.4", markers = "implementation_name == \"cpyth
 
 [[package]]
 name = "cached-ipaddress"
-version = "1.1.1"
+version = "1.1.2"
 description = "Cache construction of ipaddress objects"
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "cached_ipaddress-1.1.1-cp314-cp314-manylinux_2_41_x86_64.whl", hash = "sha256:2b2a3d57878b36682b78e8908a02b0d1c7e04c47093ed7d5b155516883993cd3"},
-    {file = "cached_ipaddress-1.1.1.tar.gz", hash = "sha256:2af1d9d14ae919ad55ab0a855d20eaf4f625580070d0e382a99a91a76168e426"},
+    {file = "cached_ipaddress-1.1.2-cp314-cp314-manylinux_2_41_x86_64.whl", hash = "sha256:5319b02ca66356ff9e7050e346e16f8de2279ef20b6fe512a7086cb85b17d338"},
+    {file = "cached_ipaddress-1.1.2.tar.gz", hash = "sha256:232f62f768a2531e3d64e661eb2e484b52954ceb8d2b04ad0d2317f52ce25108"},
 ]
 
 [package.dependencies]
@@ -2134,4 +2134,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<4.0"
-content-hash = "93a3a43f446e932646c2337df42f5e4dccfc9e46fbe210164823c1be791e3ba9"
+content-hash = "2ae85beb4c5e495c1faa1b34adf1d4929fc05674035fd08126479fa7441e0a83"
