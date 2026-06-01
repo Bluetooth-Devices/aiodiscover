@@ -146,7 +146,7 @@ def chunked(iterable: Iterable[Any], chunked_num: int) -> Iterable[Any]:
 class DiscoverHosts:
     """Discover hosts on the network by ARP and PTR lookup."""
 
-    def __init__(self, no_recurse: bool = True) -> None:
+    def __init__(self, no_recurse: bool = True, local_ip: str | None = None) -> None:
         """
         Init the discovery hosts.
 
@@ -154,6 +154,11 @@ class DiscoverHosts:
             no_recurse: If True (default), DNS queries will not request recursion.
                        This prevents routers from forwarding PTR queries to external
                        DNS servers, avoiding potential IP bans from public DNS services.
+            local_ip: Optional IPv4 address (as a string) of the interface to use
+                       for discovery. When set, the discovery network and ARP probes
+                       are pinned to the subnet this address belongs to, instead of
+                       being inferred from the system default route. Pass the IP of
+                       the interface a caller (e.g. Home Assistant) has chosen.
 
         """
         loop = asyncio.get_running_loop()
@@ -163,6 +168,7 @@ class DiscoverHosts:
         self._failed_nameservers: set[IPv4Address | IPv6Address] = set()
         self._last_cache_clear = loop.time()
         self._closed = False
+        self._local_ip = local_ip
 
         # Create resolver with optional no_recurse flag
         if no_recurse:
@@ -216,7 +222,7 @@ class DiscoverHosts:
             from pyroute2 import AsyncIPRoute  # noqa: PLC0415
 
             ip_route = AsyncIPRoute()
-        sys_network_data = SystemNetworkData(ip_route)
+        sys_network_data = SystemNetworkData(ip_route, local_ip=self._local_ip)
         try:
             await sys_network_data.async_setup()
         except BaseException:
