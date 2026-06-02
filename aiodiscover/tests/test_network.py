@@ -917,3 +917,25 @@ async def test_get_macos_default_gateway_e2e() -> None:
         return
     # Anything returned must be a parseable IP address.
     ip_address(result)
+
+
+@pytest.mark.parametrize(
+    "bad_value",
+    ["not-an-ip", "999.999.999.999", "192.168.1", "::1", "2001:db8::1", ""],
+)
+def test_system_network_data_rejects_invalid_local_ip(bad_value: str) -> None:
+    """Invalid local_ip on SystemNetworkData raises instead of silently dropping."""
+    with pytest.raises(ValueError, match="local_ip"):
+        SystemNetworkData(None, local_ip=bad_value)
+
+
+def test_system_network_data_accepts_none_local_ip() -> None:
+    """local_ip=None is the auto-detect path and must stay supported."""
+    net_data = SystemNetworkData(None, local_ip=None)
+    assert net_data.local_ip is None
+
+
+def test_system_network_data_accepts_valid_local_ip() -> None:
+    """Valid IPv4 local_ip is parsed into an IPv4Address."""
+    net_data = SystemNetworkData(None, local_ip="192.168.5.10")
+    assert net_data.local_ip == IPv4Address("192.168.5.10")

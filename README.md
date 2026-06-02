@@ -45,7 +45,10 @@ async with DiscoverHosts(local_ip="192.168.5.10") as discover_hosts:
 
 `local_ip` is the IPv4 address bound to the interface you want to scan
 on. Without it, `aiodiscover` infers the subnet from whichever interface
-provides a route to a well-known target.
+provides a route to a well-known target. Invalid IPv4 input raises
+`ValueError` at construction time instead of silently auto-detecting,
+so misconfiguration surfaces immediately rather than scanning the wrong
+subnet.
 
 ## Command-line usage
 

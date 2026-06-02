@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, cast
 import pycares
 from aiodns import DNSResolver
 
-from .network import SystemNetworkData, resolv_conf_signature
+from .network import SystemNetworkData, _parse_ipv4, resolv_conf_signature
 
 # Eagerly import pyroute2 at module-load time so its one-shot side effect —
 # pyroute2/config/__init__.py calling platform.uname(), which on POSIX
@@ -160,7 +160,16 @@ class DiscoverHosts:
                        being inferred from the system default route. Pass the IP of
                        the interface a caller (e.g. Home Assistant) has chosen.
 
+        Raises:
+            ValueError: If ``local_ip`` is provided but is not a valid IPv4
+                       address string. Invalid input would otherwise silently
+                       fall back to default-route auto-detection, defeating
+                       the purpose of pinning.
+
         """
+        if local_ip is not None and _parse_ipv4(local_ip) is None:
+            msg = f"local_ip must be a valid IPv4 address string, got {local_ip!r}"
+            raise ValueError(msg)
         loop = asyncio.get_running_loop()
         self._loop = loop
         self._sys_network_data: SystemNetworkData | None = None
