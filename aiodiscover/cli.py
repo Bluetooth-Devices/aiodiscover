@@ -102,6 +102,15 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_false",
         help="Allow recursive DNS PTR queries (the aiodns/pycares default).",
     )
+    parser.add_argument(
+        "--local-ip",
+        dest="local_ip",
+        default=None,
+        help=(
+            "IPv4 address of the interface to discover on. Pins discovery to the "
+            "subnet of this address instead of using the default route."
+        ),
+    )
     return parser
 
 
@@ -142,8 +151,10 @@ def _render_table(hosts: list[dict[str, str]]) -> str:
     return "\n".join(lines) + "\n"
 
 
-async def _discover(no_recurse: bool) -> list[dict[str, str]]:
-    async with DiscoverHosts(no_recurse=no_recurse) as discover_hosts:
+async def _discover(no_recurse: bool, local_ip: str | None) -> list[dict[str, str]]:
+    async with DiscoverHosts(
+        no_recurse=no_recurse, local_ip=local_ip
+    ) as discover_hosts:
         return await discover_hosts.async_discover()
 
 
@@ -154,7 +165,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     logging.basicConfig(level=getattr(logging, args.log_level))
 
     try:
-        hosts = asyncio.run(_discover(no_recurse=args.no_recurse))
+        hosts = asyncio.run(
+            _discover(no_recurse=args.no_recurse, local_ip=args.local_ip)
+        )
     except KeyboardInterrupt:
         return 130
 

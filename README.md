@@ -32,6 +32,21 @@ For long-lived consumers, reuse a single `DiscoverHosts` instance across
 scans and call `await discover_hosts.close()` at shutdown to release the
 underlying DNS resolver and netlink socket.
 
+### Picking a specific interface
+
+On hosts with more than one network interface, pass `local_ip` to pin
+discovery to the subnet of a chosen interface instead of letting the
+default route decide:
+
+```python
+async with DiscoverHosts(local_ip="192.168.5.10") as discover_hosts:
+    await discover_hosts.async_discover()
+```
+
+`local_ip` is the IPv4 address bound to the interface you want to scan
+on. Without it, `aiodiscover` infers the subnet from whichever interface
+provides a route to a well-known target.
+
 ## Command-line usage
 
 Installing `aiodiscover` exposes an `aiodiscover` console script (also
@@ -66,6 +81,9 @@ Common flags:
   `--log-level INFO` / `DEBUG`).
 - `--recurse` — allow recursive PTR queries (the default `--no-recurse`
   keeps queries from being forwarded to upstream public resolvers).
+- `--local-ip IP` — pin discovery to the subnet of `IP` (the IPv4
+  address of the interface to use). Useful when the default route
+  doesn't point at the network you want to scan.
 - `--version` — print the installed version and exit.
 
 Run `aiodiscover --help` for the full reference.

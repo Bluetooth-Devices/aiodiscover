@@ -1271,3 +1271,63 @@ async def test_resolv_conf_reload_tolerates_old_ip_route_close_error() -> None:
     fake_ip_route_1.close.assert_called_once()
 
     await discover_hosts.close()
+
+
+@pytest.mark.asyncio
+async def test_local_ip_propagates_to_sys_network_data() -> None:
+    """DiscoverHosts(local_ip=...) forwards the value to SystemNetworkData."""
+    captured: dict[str, Any] = {}
+    real_init = SystemNetworkData.__init__
+
+    def spy_init(
+        self: SystemNetworkData,
+        ip_route: Any,
+        local_ip: str | None = None,
+    ) -> None:
+        captured["local_ip"] = local_ip
+        real_init(self, ip_route, local_ip=local_ip)
+
+    fake_resolver = MagicMock()
+    fake_resolver.close = AsyncMock()
+    with patch("aiodiscover.discovery.DNSResolver", return_value=fake_resolver):
+        discover_hosts = discovery.DiscoverHosts(local_ip="192.168.5.10")
+
+    with (
+        patch.object(SystemNetworkData, "__init__", spy_init),
+        patch.object(SystemNetworkData, "async_setup", AsyncMock()),
+    ):
+        await discover_hosts._setup_sys_network_data()
+
+    assert captured["local_ip"] == "192.168.5.10"
+
+    await discover_hosts.close()
+
+
+@pytest.mark.asyncio
+async def test_local_ip_defaults_to_none() -> None:
+    """Without local_ip, DiscoverHosts forwards None to SystemNetworkData."""
+    captured: dict[str, Any] = {}
+    real_init = SystemNetworkData.__init__
+
+    def spy_init(
+        self: SystemNetworkData,
+        ip_route: Any,
+        local_ip: str | None = None,
+    ) -> None:
+        captured["local_ip"] = local_ip
+        real_init(self, ip_route, local_ip=local_ip)
+
+    fake_resolver = MagicMock()
+    fake_resolver.close = AsyncMock()
+    with patch("aiodiscover.discovery.DNSResolver", return_value=fake_resolver):
+        discover_hosts = discovery.DiscoverHosts()
+
+    with (
+        patch.object(SystemNetworkData, "__init__", spy_init),
+        patch.object(SystemNetworkData, "async_setup", AsyncMock()),
+    ):
+        await discover_hosts._setup_sys_network_data()
+
+    assert captured["local_ip"] is None
+
+    await discover_hosts.close()
