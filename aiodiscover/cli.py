@@ -32,13 +32,10 @@ _FIELD_LIMITS = {
 def _ipv4_arg(value: str) -> str:
     """Argparse type for --local-ip: accept only valid IPv4 strings."""
     try:
-        addr = ipaddress.ip_address(value)
+        ipaddress.IPv4Address(value)
     except ValueError as exc:
         msg = f"{value!r} is not a valid IPv4 address"
         raise argparse.ArgumentTypeError(msg) from exc
-    if not isinstance(addr, ipaddress.IPv4Address):
-        msg = f"{value!r} is not an IPv4 address (got IPv6)"
-        raise argparse.ArgumentTypeError(msg)
     return value
 
 
