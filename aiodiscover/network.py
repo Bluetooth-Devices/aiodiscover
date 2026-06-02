@@ -244,9 +244,19 @@ class SystemNetworkData:
     def __init__(
         self, ip_route: AsyncIPRoute | None, local_ip: str | None = None
     ) -> None:
-        """Init system network data."""
+        """Init system network data.
+
+        Raises ValueError if ``local_ip`` is set but not a valid IPv4 string.
+        """
         self.ip_route = ip_route
-        self.local_ip = _parse_ipv4(local_ip) if local_ip else None
+        if local_ip is None:
+            self.local_ip = None
+        else:
+            parsed = _parse_ipv4(local_ip)
+            if parsed is None:
+                msg = f"local_ip must be a valid IPv4 address string, got {local_ip!r}"
+                raise ValueError(msg)
+            self.local_ip = parsed
 
     async def async_setup(self) -> None:
         """Obtain the local network data."""

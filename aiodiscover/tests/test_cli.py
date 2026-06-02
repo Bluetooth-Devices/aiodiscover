@@ -201,6 +201,21 @@ def test_build_parser_local_ip_default_is_none() -> None:
     assert args.local_ip is None
 
 
+@pytest.mark.parametrize(
+    "bad_value",
+    ["not-an-ip", "999.999.999.999", "192.168.1", "::1", "2001:db8::1"],
+)
+def test_build_parser_local_ip_rejects_invalid(
+    bad_value: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """--local-ip validates at parse time so users see argparse's friendly error."""
+    parser = cli.build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--local-ip", bad_value])
+    err = capsys.readouterr().err
+    assert "IPv4" in err
+
+
 def test_main_keyboard_interrupt_returns_130() -> None:
     def _raise(coro: object) -> object:
         coro.close()  # type: ignore[attr-defined]

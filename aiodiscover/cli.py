@@ -29,6 +29,16 @@ _FIELD_LIMITS = {
 }
 
 
+def _ipv4_arg(value: str) -> str:
+    """Argparse type for --local-ip: accept only valid IPv4 strings."""
+    try:
+        ipaddress.IPv4Address(value)
+    except ValueError as exc:
+        msg = f"{value!r} is not a valid IPv4 address"
+        raise argparse.ArgumentTypeError(msg) from exc
+    return value
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Construct the argparse parser for the aiodiscover CLI."""
     parser = argparse.ArgumentParser(
@@ -105,6 +115,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--local-ip",
         dest="local_ip",
+        type=_ipv4_arg,
         default=None,
         help=(
             "IPv4 address of the interface to discover on. Pins discovery to the "

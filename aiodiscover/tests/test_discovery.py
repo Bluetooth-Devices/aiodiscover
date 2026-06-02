@@ -1331,3 +1331,21 @@ async def test_local_ip_defaults_to_none() -> None:
     assert captured["local_ip"] is None
 
     await discover_hosts.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "bad_value",
+    [
+        "not-an-ip",
+        "999.999.999.999",
+        "192.168.1",
+        "::1",
+        "2001:db8::1",
+        "",
+    ],
+)
+async def test_local_ip_invalid_raises(bad_value: str) -> None:
+    """Invalid local_ip is rejected at construction, not silently auto-detected."""
+    with pytest.raises(ValueError, match="local_ip"):
+        discovery.DiscoverHosts(local_ip=bad_value)
