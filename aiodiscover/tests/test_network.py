@@ -160,6 +160,34 @@ async def test_setup_router_ip_fallback_uses_first_network_host(
 
 
 @pytest.mark.asyncio
+async def test_setup_reads_resolv_conf_off_the_event_loop() -> None:
+    """async_setup performs the blocking resolv.conf read in an executor."""
+    ran_without_running_loop = False
+
+    def fake_load() -> tuple[ResolvConfSignature, list[IPv4Address]]:
+        nonlocal ran_without_running_loop
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            ran_without_running_loop = True
+        return ResolvConfSignature(0, 0), [IPv4Address("192.168.1.53")]
+
+    adapter = MagicMock()
+    adapter.ips = [MagicMock(ip="192.168.1.10", network_prefix=24)]
+    net_data = SystemNetworkData(None, local_ip="192.168.1.10")
+    with (
+        patch(
+            "aiodiscover.network.load_resolv_conf_with_signature",
+            side_effect=fake_load,
+        ),
+        patch("aiodiscover.network.ifaddr.get_adapters", return_value=[adapter]),
+    ):
+        await net_data.async_setup()
+    assert ran_without_running_loop
+    assert net_data.nameservers == [IPv4Address("192.168.1.53")]
+
+
+@pytest.mark.asyncio
 async def test_setup_propagates_missing_resolv_conf_on_non_windows() -> None:
     """On Linux/macOS, a missing resolv.conf still bubbles up."""
     net_data = SystemNetworkData(None, local_ip="192.168.1.10")

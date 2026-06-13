@@ -264,8 +264,11 @@ class SystemNetworkData:
         # resolv.conf is absent on Windows (the FileNotFoundError below is
         # swallowed there) and so later code can iterate unconditionally.
         self.nameservers = []
+        loop = asyncio.get_running_loop()
         try:
-            signature, resolvers = load_resolv_conf_with_signature()
+            signature, resolvers = await loop.run_in_executor(
+                None, load_resolv_conf_with_signature
+            )
         except FileNotFoundError:
             if sys.platform != "win32":
                 raise
