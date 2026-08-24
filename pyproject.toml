@@ -44,7 +44,7 @@ pytest-asyncio = ">=1.4.0,<1.5.0"
 pytest-sugar = "^1.1.1"
 pytest-timeout = "^2.3.1"
 mypy = "^2.3.1"
-blockbuster = ">=1.5.5,<2.0.0"
+blockbuster = ">=1.5.27,<2.0.0"
 
 [tool.poetry.group.docs]
 optional = true
