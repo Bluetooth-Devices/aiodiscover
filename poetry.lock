@@ -183,14 +183,14 @@ lxml = ["lxml"]
 
 [[package]]
 name = "blockbuster"
-version = "1.5.26"
+version = "1.5.27"
 description = "Utility to detect blocking calls in the async event loop"
 optional = false
 python-versions = ">=3.8"
 groups = ["dev"]
 files = [
-    {file = "blockbuster-1.5.26-py3-none-any.whl", hash = "sha256:f8e53fb2dd4b6c6ec2f04907ddbd063ca7cd1ef587d24448ef4e50e81e3a79bb"},
-    {file = "blockbuster-1.5.26.tar.gz", hash = "sha256:cc3ce8c70fa852a97ee3411155f31e4ad2665cd1c6c7d2f8bb1851dab61dc629"},
+    {file = "blockbuster-1.5.27-py3-none-any.whl", hash = "sha256:f0acf153d22a791bf5f142935332ef8530960ec215541b48a6037e6cea0a8645"},
+    {file = "blockbuster-1.5.27.tar.gz", hash = "sha256:b8e9d988b9b91ba468c94530e219f26a00d3ff616b39ebf3da561a2a3eea9dd4"},
 ]
 
 [package.dependencies]
@@ -2145,4 +2145,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<4.0"
-content-hash = "b084f15127fb6f8211c3c81bf91d17c633091a0f646f7e4a215a39f04a6d17bc"
+content-hash = "33b2d73e69f981b2de28f925bd7c95d1f1c99a4774b56bba28ac2ec4920b42c8"
