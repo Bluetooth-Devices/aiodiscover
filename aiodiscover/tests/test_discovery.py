@@ -1,5 +1,6 @@
 import asyncio
 import sys
+import warnings
 from dataclasses import dataclass
 from ipaddress import IPv4Address, IPv4Network
 from typing import Any
@@ -21,6 +22,22 @@ class MockReply:
     name: str
 
 
+def make_ptr_response(name: str, ttl: int = 300) -> pycares.DNSResult:
+    return pycares.DNSResult(
+        answer=[
+            pycares.DNSRecord(
+                name="2.107.168.192.in-addr.arpa",
+                type=pycares.QUERY_TYPE_PTR,
+                record_class=pycares.QUERY_CLASS_IN,
+                ttl=ttl,
+                data=pycares.PTRRecordData(dname=name),
+            )
+        ],
+        authority=[],
+        additional=[],
+    )
+
+
 @pytest.mark.asyncio
 async def test_async_discover_hosts() -> None:
     """Verify discover hosts does not throw."""
@@ -28,6 +45,42 @@ async def test_async_discover_hosts() -> None:
         with patch.object(discovery, "MAX_ADDRESSES", 16):
             hosts = await discover_hosts.async_discover()
     assert isinstance(hosts, list)
+
+
+@pytest.mark.asyncio
+async def test_async_query_for_ptrs_no_query_deprecation() -> None:
+    native = make_ptr_response("router.example.com", ttl=123)
+    channel = MagicMock()
+
+    def answer(host: str, qtype: int, *, callback: Any, **kwargs: Any) -> None:
+        assert host == "2.107.168.192.in-addr.arpa"
+        assert qtype == pycares.QUERY_TYPE_PTR
+        callback(native, None)
+
+    channel.query.side_effect = answer
+    with patch.object(
+        aiodns.DNSResolver, "_make_channel", return_value=(False, channel)
+    ):
+        async with aiodns.DNSResolver() as resolver:
+            with warnings.catch_warnings(record=True) as recorded:
+                warnings.simplefilter("always", DeprecationWarning)
+                result = await discovery.async_query_for_ptrs(
+                    resolver, [IPv4Address("192.168.107.2")]
+                )
+            assert not [
+                item
+                for item in recorded
+                if issubclass(item.category, DeprecationWarning)
+                and str(item.message)
+                == "query() is deprecated, use query_dns() instead"
+            ]
+            assert isinstance(result[0], aiodns.AresQueryPTRResult)
+            assert result[0].name == "router.example.com"
+            assert result[0].ttl == 123
+            assert result[0].aliases == []
+            channel.query.assert_called_once()
+            channel.cancel.assert_called_once()
+    channel.close.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -80,19 +133,21 @@ async def test_async_query_for_ptrs() -> None:
     """Test async_query_for_ptrs handles missing ips."""
     loop = asyncio.get_running_loop()
     count = 0
+    queries: list[tuple[str, str]] = []
 
-    def mock_query(*args: Any, **kwargs: Any) -> Any:
+    def mock_query_dns(host: str, qtype: str) -> asyncio.Future[pycares.DNSResult]:
         nonlocal count
         count += 1
+        queries.append((host, qtype))
         future = loop.create_future()
         if count == 2:
             future.set_exception(Exception("test"))
         else:
-            future.set_result(MockReply(name=f"name{count}"))
+            future.set_result(make_ptr_response(f"name{count}", ttl=100 + count))
         return future
 
     resolver = MagicMock(spec=aiodns.DNSResolver)
-    resolver.query.side_effect = mock_query
+    resolver.query_dns.side_effect = mock_query_dns
     resolver.nameservers = ["192.168.107.1"]
     with patch.object(discovery, "DNS_RESPONSE_TIMEOUT", 0):
         response = await discovery.async_query_for_ptrs(
@@ -105,9 +160,194 @@ async def test_async_query_for_ptrs() -> None:
         )
 
     assert len(response) == 3
-    assert response[0].name == "name1"  # type: ignore
+    assert isinstance(response[0], aiodns.AresQueryPTRResult)
+    assert response[0].name == "name1"
+    assert response[0].ttl == 101
+    assert response[0].aliases == []
     assert response[1] is None  # type: ignore
-    assert response[2].name == "name3"  # type: ignore
+    assert isinstance(response[2], aiodns.AresQueryPTRResult)
+    assert response[2].name == "name3"
+    assert response[2].ttl == 103
+    assert response[2].aliases == []
+    assert queries == [
+        ("2.107.168.192.in-addr.arpa", "PTR"),
+        ("3.107.168.192.in-addr.arpa", "PTR"),
+        ("4.107.168.192.in-addr.arpa", "PTR"),
+    ]
+    resolver.query.assert_not_called()
+    resolver.cancel.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_async_query_for_ptrs_no_records() -> None:
+    resolver = MagicMock(spec=aiodns.DNSResolver)
+    future = asyncio.get_running_loop().create_future()
+    future.set_result(pycares.DNSResult(answer=[], authority=[], additional=[]))
+    resolver.query_dns.return_value = future
+
+    assert await discovery.async_query_for_ptrs(
+        resolver, [IPv4Address("192.168.107.2")]
+    ) == [None]
+    resolver.query_dns.assert_called_once_with("2.107.168.192.in-addr.arpa", "PTR")
+    resolver.query.assert_not_called()
+    resolver.cancel.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_async_query_for_ptrs_first_ptr() -> None:
+    resolver = MagicMock(spec=aiodns.DNSResolver)
+    first = make_ptr_response("first.example", ttl=123)
+    second = make_ptr_response("second.example", ttl=456)
+    future = asyncio.get_running_loop().create_future()
+    future.set_result(
+        pycares.DNSResult(
+            answer=[
+                pycares.DNSRecord(
+                    name="reverse.example",
+                    type=pycares.QUERY_TYPE_CNAME,
+                    record_class=pycares.QUERY_CLASS_IN,
+                    ttl=10,
+                    data=pycares.CNAMERecordData(cname="alias.example"),
+                ),
+                *first.answer,
+                *second.answer,
+            ],
+            authority=[],
+            additional=[],
+        )
+    )
+    resolver.query_dns.return_value = future
+
+    result = await discovery.async_query_for_ptrs(
+        resolver, [IPv4Address("192.168.107.2")]
+    )
+
+    assert isinstance(result[0], aiodns.AresQueryPTRResult)
+    assert result[0].name == "first.example"
+    assert result[0].ttl == 123
+    assert result[0].aliases == []
+    resolver.query.assert_not_called()
+    resolver.cancel.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_async_query_for_ptrs_invalid_first_hostname() -> None:
+    resolver = MagicMock(spec=aiodns.DNSResolver)
+    invalid = make_ptr_response("-invalid.example")
+    valid = make_ptr_response("valid.example")
+    future = asyncio.get_running_loop().create_future()
+    future.set_result(
+        pycares.DNSResult(
+            answer=[*invalid.answer, *valid.answer],
+            authority=[],
+            additional=[],
+        )
+    )
+    resolver.query_dns.return_value = future
+
+    result = await discovery.async_query_for_ptrs(
+        resolver, [IPv4Address("192.168.107.2")]
+    )
+
+    assert isinstance(result[0], aiodns.AresQueryPTRResult)
+    assert result[0].name == "-invalid.example"
+    assert discovery.dns_message_short_hostname(result[0]) is None
+    resolver.query.assert_not_called()
+    resolver.cancel.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        [],
+        [
+            pycares.DNSRecord(
+                name="reverse.example",
+                type=pycares.QUERY_TYPE_CNAME,
+                record_class=pycares.QUERY_CLASS_IN,
+                ttl=10,
+                data=pycares.CNAMERecordData(cname="alias.example"),
+            )
+        ],
+    ],
+)
+@pytest.mark.asyncio
+async def test_async_query_for_ptrs_ignores_other_sections(
+    answer: list[pycares.DNSRecord],
+) -> None:
+    resolver = MagicMock(spec=aiodns.DNSResolver)
+    authority = make_ptr_response("authority.example")
+    additional = make_ptr_response("additional.example")
+    future = asyncio.get_running_loop().create_future()
+    future.set_result(
+        pycares.DNSResult(
+            answer=answer,
+            authority=authority.answer,
+            additional=additional.answer,
+        )
+    )
+    resolver.query_dns.return_value = future
+
+    assert await discovery.async_query_for_ptrs(
+        resolver, [IPv4Address("192.168.107.2")]
+    ) == [None]
+    resolver.query.assert_not_called()
+    resolver.cancel.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        pycares.errno.ARES_ENODATA,
+        pycares.errno.ARES_ENOTFOUND,
+        pycares.errno.ARES_ESERVFAIL,
+        pycares.errno.ARES_EREFUSED,
+        pycares.errno.ARES_ETIMEOUT,
+    ],
+)
+@pytest.mark.asyncio
+async def test_async_query_for_ptrs_dns_errors(code: int) -> None:
+    loop = asyncio.get_running_loop()
+    queries: list[tuple[str, str]] = []
+
+    def mock_query_dns(host: str, qtype: str) -> asyncio.Future[pycares.DNSResult]:
+        queries.append((host, qtype))
+        future = loop.create_future()
+        if len(queries) == 1:
+            future.set_exception(
+                aiodns.error.DNSError(code, pycares.errno.strerror(code))
+            )
+        else:
+            future.set_result(make_ptr_response("ok.example"))
+        return future
+
+    resolver = MagicMock(spec=aiodns.DNSResolver)
+    resolver.query_dns.side_effect = mock_query_dns
+
+    result = await discovery.async_query_for_ptrs(
+        resolver,
+        [IPv4Address("192.168.107.2"), IPv4Address("192.168.107.3")],
+    )
+
+    assert result[0] is None
+    assert isinstance(result[1], aiodns.AresQueryPTRResult)
+    assert result[1].name == "ok.example"
+    assert queries == [
+        ("2.107.168.192.in-addr.arpa", "PTR"),
+        ("3.107.168.192.in-addr.arpa", "PTR"),
+    ]
+    resolver.query.assert_not_called()
+    resolver.cancel.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_async_query_for_ptrs_empty_input() -> None:
+    resolver = MagicMock(spec=aiodns.DNSResolver)
+
+    assert await discovery.async_query_for_ptrs(resolver, []) == []
+    resolver.query_dns.assert_not_called()
+    resolver.query.assert_not_called()
+    resolver.cancel.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -176,23 +416,21 @@ async def test_async_query_for_ptrs_chunked() -> None:
     """Test async_query_for_ptrs chunkeds."""
     loop = asyncio.get_running_loop()
     count = 0
+    queries: list[tuple[str, str]] = []
 
-    @dataclass
-    class MockReply:
-        name: str
-
-    def mock_query(*args: Any, **kwargs: Any) -> Any:
+    def mock_query_dns(host: str, qtype: str) -> asyncio.Future[pycares.DNSResult]:
         nonlocal count
         count += 1
+        queries.append((host, qtype))
         future = loop.create_future()
         if count == 2:
             future.set_exception(Exception("test"))
         else:
-            future.set_result(MockReply(name=f"name{count}"))
+            future.set_result(make_ptr_response(f"name{count}", ttl=100 + count))
         return future
 
     resolver = MagicMock(spec=aiodns.DNSResolver)
-    resolver.query.side_effect = mock_query
+    resolver.query_dns.side_effect = mock_query_dns
     resolver.nameservers = ["192.168.107.1"]
     with (
         patch.object(discovery, "DNS_RESPONSE_TIMEOUT", 0),
@@ -208,9 +446,22 @@ async def test_async_query_for_ptrs_chunked() -> None:
         )
 
     assert len(response) == 3
-    assert response[0].name == "name1"  # type: ignore
+    assert isinstance(response[0], aiodns.AresQueryPTRResult)
+    assert response[0].name == "name1"
+    assert response[0].ttl == 101
+    assert response[0].aliases == []
     assert response[1] is None
-    assert response[2].name == "name3"  # type: ignore
+    assert isinstance(response[2], aiodns.AresQueryPTRResult)
+    assert response[2].name == "name3"
+    assert response[2].ttl == 103
+    assert response[2].aliases == []
+    assert queries == [
+        ("2.107.168.192.in-addr.arpa", "PTR"),
+        ("3.107.168.192.in-addr.arpa", "PTR"),
+        ("4.107.168.192.in-addr.arpa", "PTR"),
+    ]
+    resolver.query.assert_not_called()
+    resolver.cancel.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -220,7 +471,7 @@ async def test_async_query_for_ptrs_pending_futures_marked_none() -> None:
     count = 0
     pending_future: asyncio.Future[Any] | None = None
 
-    def mock_query(*args: Any, **kwargs: Any) -> Any:
+    def mock_query_dns(host: str, qtype: str) -> asyncio.Future[pycares.DNSResult]:
         nonlocal count, pending_future
         count += 1
         future = loop.create_future()
@@ -228,11 +479,11 @@ async def test_async_query_for_ptrs_pending_futures_marked_none() -> None:
             # Never resolve — simulates a wedged resolver / black-holed UDP.
             pending_future = future
         else:
-            future.set_result(MockReply(name=f"name{count}"))
+            future.set_result(make_ptr_response(f"name{count}", ttl=100 + count))
         return future
 
     resolver = MagicMock(spec=aiodns.DNSResolver)
-    resolver.query.side_effect = mock_query
+    resolver.query_dns.side_effect = mock_query_dns
     resolver.nameservers = ["192.168.107.1"]
     with patch.object(discovery, "DNS_RESPONSE_TIMEOUT", 0):
         response = await discovery.async_query_for_ptrs(
@@ -245,11 +496,19 @@ async def test_async_query_for_ptrs_pending_futures_marked_none() -> None:
         )
 
     assert len(response) == 3
-    assert response[0].name == "name1"  # type: ignore
+    assert isinstance(response[0], aiodns.AresQueryPTRResult)
+    assert response[0].name == "name1"
+    assert response[0].ttl == 101
+    assert response[0].aliases == []
     assert response[1] is None
-    assert response[2].name == "name3"  # type: ignore
+    assert isinstance(response[2], aiodns.AresQueryPTRResult)
+    assert response[2].name == "name3"
+    assert response[2].ttl == 103
+    assert response[2].aliases == []
     assert pending_future is not None
     assert pending_future.cancelled()
+    resolver.query.assert_not_called()
+    resolver.cancel.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -258,13 +517,13 @@ async def test_async_query_for_ptrs_cancellation_releases_resolver() -> None:
     loop = asyncio.get_running_loop()
     submitted: list[asyncio.Future[Any]] = []
 
-    def mock_query(*args: Any, **kwargs: Any) -> Any:
+    def mock_query_dns(host: str, qtype: str) -> asyncio.Future[pycares.DNSResult]:
         future = loop.create_future()
         submitted.append(future)
         return future  # never resolves — caller must cancel us out of it
 
     resolver = MagicMock(spec=aiodns.DNSResolver)
-    resolver.query.side_effect = mock_query
+    resolver.query_dns.side_effect = mock_query_dns
     resolver.nameservers = ["192.168.107.1"]
 
     with (
@@ -292,6 +551,7 @@ async def test_async_query_for_ptrs_cancellation_releases_resolver() -> None:
     assert resolver.cancel.call_count == 1
     assert submitted
     assert all(future.done() for future in submitted)
+    resolver.query.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -300,7 +560,7 @@ async def test_async_query_for_ptrs_cancellation_retrieves_done_exception() -> N
     loop = asyncio.get_running_loop()
     submitted: list[asyncio.Future[Any]] = []
 
-    def mock_query(*args: Any, **kwargs: Any) -> Any:
+    def mock_query_dns(host: str, qtype: str) -> asyncio.Future[pycares.DNSResult]:
         future = loop.create_future()
         if not submitted:
             future.set_exception(RuntimeError("boom"))
@@ -308,7 +568,7 @@ async def test_async_query_for_ptrs_cancellation_retrieves_done_exception() -> N
         return future
 
     resolver = MagicMock(spec=aiodns.DNSResolver)
-    resolver.query.side_effect = mock_query
+    resolver.query_dns.side_effect = mock_query_dns
     resolver.nameservers = ["192.168.107.1"]
 
     with (
@@ -337,6 +597,7 @@ async def test_async_query_for_ptrs_cancellation_retrieves_done_exception() -> N
     assert not submitted[0].cancelled()
     assert submitted[0].exception() is not None
     assert submitted[1].cancelled()
+    resolver.query.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -345,7 +606,7 @@ async def test_async_query_for_ptrs_cancellation_skips_already_cancelled() -> No
     loop = asyncio.get_running_loop()
     submitted: list[asyncio.Future[Any]] = []
 
-    def mock_query(*args: Any, **kwargs: Any) -> Any:
+    def mock_query_dns(host: str, qtype: str) -> asyncio.Future[pycares.DNSResult]:
         future = loop.create_future()
         if not submitted:
             future.cancel()
@@ -353,7 +614,7 @@ async def test_async_query_for_ptrs_cancellation_skips_already_cancelled() -> No
         return future
 
     resolver = MagicMock(spec=aiodns.DNSResolver)
-    resolver.query.side_effect = mock_query
+    resolver.query_dns.side_effect = mock_query_dns
     resolver.nameservers = ["192.168.107.1"]
 
     with (
@@ -380,6 +641,7 @@ async def test_async_query_for_ptrs_cancellation_skips_already_cancelled() -> No
     assert resolver.cancel.call_count == 1
     assert submitted[0].cancelled()
     assert submitted[1].cancelled()
+    resolver.query.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -409,6 +671,35 @@ async def test_async_get_hostnames_no_results(
     # We should not add failed nameservers if we get no results
     # since it could be a transient issue
     assert discover_hosts._failed_nameservers == set()
+
+
+@pytest.mark.asyncio
+async def test_async_get_hostnames_native_ptrs(
+    discover_hosts: discovery.DiscoverHosts,
+) -> None:
+    net_data = SystemNetworkData(None, None)
+    net_data.router_ip = IPv4Address("192.168.0.1")
+    net_data.network = IPv4Network("192.168.0.0/31")
+    net_data.nameservers = [IPv4Address("192.168.0.254")]
+    loop = asyncio.get_running_loop()
+    responses = [
+        make_ptr_response("xn--bcher-kva.example.com"),
+        pycares.DNSResult(answer=[], authority=[], additional=[]),
+    ]
+
+    def mock_query_dns(host: str, qtype: str) -> asyncio.Future[pycares.DNSResult]:
+        future = loop.create_future()
+        future.set_result(responses.pop(0))
+        return future
+
+    with (
+        patch.object(net_data, "async_get_neighbours", return_value={}),
+        patch.object(discover_hosts._resolver, "query_dns", side_effect=mock_query_dns),
+    ):
+        hostnames = await discover_hosts.async_get_hostnames(net_data)
+
+    assert hostnames == {"192.168.0.0": "bücher"}
+    assert responses == []
 
 
 @pytest.mark.asyncio

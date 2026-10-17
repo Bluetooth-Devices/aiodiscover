@@ -9,7 +9,7 @@ from itertools import islice
 from typing import TYPE_CHECKING, Any, cast
 
 import pycares
-from aiodns import DNSResolver
+from aiodns import AresQueryPTRResult, DNSResolver
 
 from .network import SystemNetworkData, _parse_ipv4, resolv_conf_signature
 
@@ -28,7 +28,6 @@ if TYPE_CHECKING:
     from ipaddress import IPv4Address, IPv6Address
     from types import TracebackType
 
-    from aiodns import AresQueryPTRResult
     from pyroute2 import AsyncIPRoute
 
     from .network import ResolvConfSignature
@@ -82,6 +81,15 @@ def dns_message_short_hostname(dns_message: Any | None) -> str | None:
     return short
 
 
+def _dns_result_to_ptr(result: pycares.DNSResult) -> AresQueryPTRResult | None:
+    """Extract the first PTR answer."""
+    for record in result.answer:
+        if record.type == pycares.QUERY_TYPE_PTR:
+            data = cast("pycares.PTRRecordData", record.data)
+            return AresQueryPTRResult(name=data.dname, ttl=record.ttl, aliases=[])
+    return None
+
+
 async def async_query_for_ptrs(
     resolver: DNSResolver,
     ips_to_lookup: list[IPv4Address],
@@ -93,12 +101,12 @@ async def async_query_for_ptrs(
     # does not cancel its wrapped futures when its task is cancelled, so we
     # must do it ourselves to keep pycares from leaking query slots and from
     # later firing "exception was never retrieved" warnings.
-    in_flight: list[asyncio.Future[AresQueryPTRResult]] = []
+    in_flight: list[asyncio.Future[pycares.DNSResult]] = []
     try:
         for ip_chunk in chunked(ips_to_lookup, QUERY_BUCKET_SIZE):
             if TYPE_CHECKING:
                 ip_chunk = cast("list[IPv4Address]", ip_chunk)
-            futures = [resolver.query(ip.reverse_pointer, "PTR") for ip in ip_chunk]
+            futures = [resolver.query_dns(ip.reverse_pointer, "PTR") for ip in ip_chunk]
             in_flight = futures
             # Belt-and-braces outer timeout: aiodns/pycares honour the per-query
             # `DNS_RESPONSE_TIMEOUT` configured at resolver construction, but a
@@ -109,7 +117,9 @@ async def async_query_for_ptrs(
             for future in pending:
                 future.cancel()
             results.extend(
-                None if (future in pending or future.exception()) else future.result()
+                None
+                if (future in pending or future.exception())
+                else _dns_result_to_ptr(future.result())
                 for future in futures
             )
             in_flight = []
