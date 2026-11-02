@@ -1429,14 +1429,14 @@ windows-terminal = ["colorama (>=0.4.6)"]
 
 [[package]]
 name = "pyroute2"
-version = "0.9.6"
+version = "0.9.7"
 description = "Python Netlink library"
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "pyroute2-0.9.6-py3-none-any.whl", hash = "sha256:3334091326e560a506635449af03b26920d22d4e5a7996aed354363d106fcef8"},
-    {file = "pyroute2-0.9.6.tar.gz", hash = "sha256:6bc5e2ea9a372ded682b4ede4028ba00236bd6e35b42d833f39a96b219ef1db2"},
+    {file = "pyroute2-0.9.7-py3-none-any.whl", hash = "sha256:01a2a3afe565a6acb0a0d5d8ac86c9682b6564407e3d9589070191ae94b737e8"},
+    {file = "pyroute2-0.9.7.tar.gz", hash = "sha256:a678b098478c46ec51d6bf9a03c3cd2ac0172dffa590e9e8c1eeab633d0c17c6"},
 ]
 
 [package.dependencies]
@@ -2197,4 +2197,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<4.0"
-content-hash = "81692629394d047075849634c0d234d4000e15bf1a9998d22c1dc377982bb811"
+content-hash = "120ce90a96325e35ddf4b337fb769827c104d61099af3fd9c2526aabe07cb52d"
